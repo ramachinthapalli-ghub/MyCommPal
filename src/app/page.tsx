@@ -34,8 +34,11 @@ export default function MyCommPalApp() {
   // User Authentication State
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authTab, setAuthTab] = useState<'guest' | 'email' | 'phone'>('guest');
+  
+  // Login Landing Dropdown State
+  const [showLoginDropdown, setShowLoginDropdown] = useState(false);
+  const [activeLoginMode, setActiveLoginMode] = useState<'phone' | 'email' | null>(null);
+
   const [authIdentifier, setAuthIdentifier] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -92,12 +95,11 @@ export default function MyCommPalApp() {
       if (data.user) {
         setUser(data.user);
       } else {
-        // Auto initialize as guest for immediate friction-free testing
-        loginAsGuest();
+        setUser(null);
       }
     } catch (e) {
       console.error('Failed to check user:', e);
-      loginAsGuest();
+      setUser(null);
     } finally {
       setAuthLoading(false);
     }
@@ -111,7 +113,8 @@ export default function MyCommPalApp() {
       const data = await res.json();
       if (data.user) {
         setUser(data.user);
-        setShowAuthModal(false);
+        setShowLoginDropdown(false);
+        setActiveLoginMode(null);
       }
     } catch (e) {
       console.error('Guest login failed:', e);
@@ -124,7 +127,7 @@ export default function MyCommPalApp() {
     e.preventDefault();
     setAuthError(null);
     if (!authIdentifier.trim()) {
-      setAuthError('Please enter your email or phone number.');
+      setAuthError('Please enter your details.');
       return;
     }
 
@@ -133,7 +136,7 @@ export default function MyCommPalApp() {
       const res = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: authIdentifier.trim(), type: authTab }),
+        body: JSON.stringify({ identifier: authIdentifier.trim(), type: activeLoginMode || 'phone' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
@@ -163,13 +166,14 @@ export default function MyCommPalApp() {
       const res = await fetch('/api/auth/otp', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: authIdentifier.trim(), code: otpCode.trim(), type: authTab }),
+        body: JSON.stringify({ identifier: authIdentifier.trim(), code: otpCode.trim(), type: activeLoginMode || 'phone' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Invalid OTP code');
 
       setUser(data.user);
-      setShowAuthModal(false);
+      setShowLoginDropdown(false);
+      setActiveLoginMode(null);
       setOtpSent(false);
       setOtpDevHint(null);
       setAuthIdentifier('');
@@ -184,7 +188,13 @@ export default function MyCommPalApp() {
   async function handleLogout() {
     await fetch('/api/auth/me', { method: 'DELETE' });
     setUser(null);
-    setShowAuthModal(true);
+    setShowLoginDropdown(false);
+    setActiveLoginMode(null);
+    setStep(0);
+    setAnswer1('');
+    setAnswer2('');
+    setAssessment(null);
+    setComparison(null);
   }
 
   async function loadHistory() {
@@ -419,6 +429,211 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  // =========================================================================
+  // VIEW 1: INITIAL LOGIN SCREEN (Shown initially when user accesses the app)
+  // =========================================================================
+  if (!user && !authLoading) {
+    return (
+      <div className="login-screen">
+        <div className="login-card">
+          <div className="brand" style={{ justifyContent: 'center', marginBottom: '8px' }}>
+            <span className="brand-logo">✨</span>
+            <span className="wordmark">
+              My<span>Comm</span>Pal
+            </span>
+          </div>
+          <div className="tiny" style={{ marginBottom: '24px' }}>
+            Your personal AI communication mentor
+          </div>
+
+          <div className="vira" style={{ textAlign: 'left', marginBottom: '24px' }}>
+            <span className="avatar">👩‍💼</span>
+            <div className="bubble">
+              <b>Meet Vira</b>
+              <p>Practice realistic PM conversations, receive calibrated feedback, and strengthen your articulation one session at a time.</p>
+            </div>
+          </div>
+
+          {authError && (
+            <div
+              style={{
+                background: '#ffeef2',
+                border: '1px solid #ffccd7',
+                color: '#cf1746',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                fontSize: '13px',
+                marginBottom: '16px',
+                textAlign: 'left',
+              }}
+            >
+              {authError}
+            </div>
+          )}
+
+          {/* If an active mode (mobile or email) is selected, show the input form */}
+          {activeLoginMode ? (
+            <div style={{ textAlign: 'left', marginTop: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '17px', fontWeight: 800 }}>
+                  {activeLoginMode === 'phone' ? '📱 Mobile OTP Login' : '✉️ Email OTP Login'}
+                </h3>
+                <button
+                  type="button"
+                  className="reset"
+                  onClick={() => {
+                    setActiveLoginMode(null);
+                    setOtpSent(false);
+                    setAuthError(null);
+                    setAuthIdentifier('');
+                    setOtpCode('');
+                  }}
+                >
+                  ← Other options
+                </button>
+              </div>
+
+              {!otpSent ? (
+                <form onSubmit={handleSendOtp}>
+                  <label className="field" htmlFor="loginInput">
+                    {activeLoginMode === 'phone' ? 'Mobile phone number' : 'Work or personal email'}
+                  </label>
+                  <input
+                    id="loginInput"
+                    className="input"
+                    type={activeLoginMode === 'phone' ? 'tel' : 'email'}
+                    placeholder={activeLoginMode === 'phone' ? 'e.g. 9989624123 or +1 555-0199' : 'e.g. alex@company.com'}
+                    value={authIdentifier}
+                    onChange={e => setAuthIdentifier(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className="btn"
+                    style={{ width: '100%', marginTop: '16px' }}
+                    disabled={otpSending}
+                  >
+                    {otpSending ? 'Sending verification code...' : 'Send Verification Code'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp}>
+                  <label className="field" htmlFor="otpInput">
+                    Enter 6-digit verification code sent to {authIdentifier}
+                  </label>
+                  <input
+                    id="otpInput"
+                    className="input"
+                    type="text"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={e => setOtpCode(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                  <div className="tiny" style={{ color: '#6545e8', marginTop: '6px', fontWeight: 600 }}>
+                    {otpDevHint ? `${otpDevHint} (Auto-filled)` : '💡 Quick test code: 123456'}
+                  </div>
+                  <button
+                    type="submit"
+                    className="btn"
+                    style={{ width: '100%', marginTop: '16px' }}
+                    disabled={otpVerifying}
+                  >
+                    {otpVerifying ? 'Verifying...' : 'Verify & Enter MyCommPal'}
+                  </button>
+                  <div style={{ textAlign: 'center', marginTop: '12px' }}>
+                    <button
+                      type="button"
+                      className="reset"
+                      onClick={() => setOtpSent(false)}
+                    >
+                      ← Change {activeLoginMode === 'phone' ? 'phone number' : 'email'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          ) : (
+            /* Otherwise, show the Login Button with Dropdown */
+            <div className="login-dropdown-wrapper">
+              <button
+                type="button"
+                className="btn login-trigger-btn"
+                onClick={() => setShowLoginDropdown(prev => !prev)}
+              >
+                <span>Login to MyCommPal</span>
+                <span style={{ fontSize: '18px', transition: 'transform 0.2s', transform: showLoginDropdown ? 'rotate(180deg)' : 'none' }}>
+                  ▾
+                </span>
+              </button>
+
+              {showLoginDropdown && (
+                <div className="login-dropdown-menu">
+                  {/* Option 1: Mobile OTP */}
+                  <button
+                    type="button"
+                    className="login-dropdown-item"
+                    onClick={() => {
+                      setActiveLoginMode('phone');
+                      setShowLoginDropdown(false);
+                      setAuthError(null);
+                    }}
+                  >
+                    <span className="login-dropdown-icon">📱</span>
+                    <div>
+                      <strong>Mobile OTP</strong>
+                      <span>Sign in with your mobile phone number</span>
+                    </div>
+                  </button>
+
+                  {/* Option 2: Email OTP */}
+                  <button
+                    type="button"
+                    className="login-dropdown-item"
+                    onClick={() => {
+                      setActiveLoginMode('email');
+                      setShowLoginDropdown(false);
+                      setAuthError(null);
+                    }}
+                  >
+                    <span className="login-dropdown-icon">✉️</span>
+                    <div>
+                      <strong>Email OTP</strong>
+                      <span>Sign in with your email address</span>
+                    </div>
+                  </button>
+
+                  {/* Option 3: Continue as Guest */}
+                  <button
+                    type="button"
+                    className="login-dropdown-item"
+                    onClick={loginAsGuest}
+                  >
+                    <span className="login-dropdown-icon">👤</span>
+                    <div>
+                      <strong>Continue as Guest</strong>
+                      <span>1-click immediate access, no codes needed</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="footer" style={{ justifyContent: 'center', marginTop: '30px' }}>
+            <span>Data persists in Supabase. All sessions are secure.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: AUTHENTICATED APP (Full 4-Screen HTML Prototype Flow)
+  // =========================================================================
   return (
     <div className="shell">
       {/* Sidebar Navigation */}
@@ -473,7 +688,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
         <div className="top">
           <span className="eyebrow">PRACTICE WITH VIRA · SPEAK WITH IMPACT</span>
           <div className="top-actions">
-            {user ? (
+            {user && (
               <>
                 <span className={`badge ${user.authType === 'guest' ? 'guest' : 'verified'}`}>
                   {user.authType === 'guest' ? '👤 Guest' : user.authType === 'phone' ? '📱' : '✉️'}{' '}
@@ -486,10 +701,6 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
                   Sign out
                 </button>
               </>
-            ) : (
-              <button className="btn secondary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setShowAuthModal(true)}>
-                Sign in / Register
-              </button>
             )}
             <span className="pill">✦ Vercel Live Ready</span>
           </div>
@@ -982,153 +1193,6 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
           </div>
         </div>
       </main>
-
-      {/* Auth Modal (Email OTP, Mobile OTP, Guest Login) */}
-      {showAuthModal && (
-        <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2 style={{ marginBottom: '6px' }}>Sign in to MyCommPal</h2>
-            <p style={{ marginBottom: '16px' }}>
-              Persist your practice sessions, track articulation growth, and access your mentor feedback anytime.
-            </p>
-
-            {/* Auth Mode Tabs */}
-            <div className="auth-tabs">
-              <button
-                type="button"
-                className={`auth-tab ${authTab === 'guest' ? 'active' : ''}`}
-                onClick={() => {
-                  setAuthTab('guest');
-                  setOtpSent(false);
-                  setAuthError(null);
-                }}
-              >
-                👤 Guest
-              </button>
-              <button
-                type="button"
-                className={`auth-tab ${authTab === 'email' ? 'active' : ''}`}
-                onClick={() => {
-                  setAuthTab('email');
-                  setOtpSent(false);
-                  setAuthError(null);
-                }}
-              >
-                ✉️ Email OTP
-              </button>
-              <button
-                type="button"
-                className={`auth-tab ${authTab === 'phone' ? 'active' : ''}`}
-                onClick={() => {
-                  setAuthTab('phone');
-                  setOtpSent(false);
-                  setAuthError(null);
-                }}
-              >
-                📱 Mobile OTP
-              </button>
-            </div>
-
-            {authError && (
-              <div
-                style={{
-                  background: '#ffeef2',
-                  border: '1px solid #ffccd7',
-                  color: '#cf1746',
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  marginBottom: '14px',
-                }}
-              >
-                {authError}
-              </div>
-            )}
-
-            {/* GUEST LOGIN */}
-            {authTab === 'guest' && (
-              <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                <p>Continue immediately without passwords or verification codes. Your practice data persists in Supabase.</p>
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ width: '100%', marginTop: '12px' }}
-                  onClick={loginAsGuest}
-                >
-                  Continue as Guest →
-                </button>
-              </div>
-            )}
-
-            {/* EMAIL OR MOBILE OTP */}
-            {(authTab === 'email' || authTab === 'phone') && (
-              <div>
-                {!otpSent ? (
-                  <form onSubmit={handleSendOtp}>
-                    <label className="field" htmlFor="authInput">
-                      {authTab === 'email' ? 'Work or personal email' : 'Mobile phone number with country code'}
-                    </label>
-                    <input
-                      id="authInput"
-                      className="input"
-                      type={authTab === 'email' ? 'email' : 'tel'}
-                      placeholder={authTab === 'email' ? 'alex@company.com' : '+1 555-0199'}
-                      value={authIdentifier}
-                      onChange={e => setAuthIdentifier(e.target.value)}
-                      required
-                    />
-                    <button
-                      type="submit"
-                      className="btn"
-                      style={{ width: '100%', marginTop: '16px' }}
-                      disabled={otpSending}
-                    >
-                      {otpSending ? 'Sending verification code...' : 'Send Verification Code'}
-                    </button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleVerifyOtp}>
-                    <label className="field" htmlFor="otpInput">
-                      Enter 6-digit verification code sent to {authIdentifier}
-                    </label>
-                    <input
-                      id="otpInput"
-                      className="input"
-                      type="text"
-                      maxLength={6}
-                      placeholder="123456"
-                      value={otpCode}
-                      onChange={e => setOtpCode(e.target.value)}
-                      required
-                      autoFocus
-                    />
-                    <div className="tiny" style={{ color: '#6545e8', marginTop: '6px', fontWeight: 600 }}>
-                      {otpDevHint ? `${otpDevHint} (Auto-filled)` : '💡 Quick test code: 123456'}
-                    </div>
-                    <button
-                      type="submit"
-                      className="btn"
-                      style={{ width: '100%', marginTop: '16px' }}
-                      disabled={otpVerifying}
-                    >
-                      {otpVerifying ? 'Verifying...' : 'Verify & Continue'}
-                    </button>
-                    <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                      <button
-                        type="button"
-                        className="reset"
-                        onClick={() => setOtpSent(false)}
-                      >
-                        ← Change {authTab === 'email' ? 'email' : 'phone number'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* History Modal */}
       {showHistoryModal && (
