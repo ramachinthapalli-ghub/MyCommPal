@@ -73,6 +73,13 @@ export interface MentorCompareResponse {
   whatImproved: string;
   stillNeedsWork: string;
   nextStep: string;
+  savedSessionId?: string;
+  userFeedback?: {
+    rating: number;
+    tags?: string[];
+    comment?: string;
+    submittedAt?: string;
+  };
 }
 
 export interface PracticeSessionRecord {

@@ -359,3 +359,50 @@ export async function getUserSessions(userId: string): Promise<PracticeSessionRe
     .filter(s => s.userId === userId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
+
+export async function updateSessionFeedback(sessionId: string, feedback: {
+  rating: number;
+  tags?: string[];
+  comment?: string;
+}): Promise<boolean> {
+  const client = getSupabaseServerClient();
+  const feedbackRecord = {
+    ...feedback,
+    submittedAt: new Date().toISOString(),
+  };
+
+  if (client) {
+    try {
+      const { data: existing } = await client
+        .from('practice_sessions')
+        .select('comparison')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      const updatedComparison = {
+        ...(existing?.comparison || {}),
+        userFeedback: feedbackRecord,
+      };
+
+      const { error } = await client
+        .from('practice_sessions')
+        .update({ comparison: updatedComparison, updated_at: new Date().toISOString() })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+      return true;
+    } catch (e: any) {
+      console.warn('Failed to update session feedback in Supabase:', e?.message || e);
+    }
+  }
+
+  // Memory fallback
+  const mem = memoryStore.sessions.get(sessionId);
+  if (mem) {
+    if (mem.comparison) {
+      mem.comparison.userFeedback = feedbackRecord;
+    }
+    return true;
+  }
+  return false;
+}

@@ -82,6 +82,13 @@ export default function MyCommPalApp() {
   const [comparing, setComparing] = useState(false);
   const [comparison, setComparison] = useState<MentorCompareResponse | null>(null);
 
+  // Quick User Feedback state
+  const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
+  const [feedbackTags, setFeedbackTags] = useState<string[]>([]);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
   // History State
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historySessions, setHistorySessions] = useState<PracticeSessionRecord[]>([]);
@@ -389,7 +396,34 @@ export default function MyCommPalApp() {
     }
   }
 
+  async function handleSubmitFeedback() {
+    if (!feedbackRating) return;
+    try {
+      setFeedbackSubmitting(true);
+      await fetch('/api/sessions/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: comparison?.savedSessionId,
+          rating: feedbackRating,
+          tags: feedbackTags,
+          comment: feedbackComment.trim(),
+        }),
+      });
+      setFeedbackSubmitted(true);
+    } catch (e) {
+      console.error('Failed to submit feedback:', e);
+      setFeedbackSubmitted(true);
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }
+
   function handleCopySummary() {
+    const feedbackLine = feedbackRating
+      ? `\n\nUser Feedback on Guidance: ${feedbackRating}/5 ${feedbackTags.length ? '· ' + feedbackTags.join(', ') : ''} ${feedbackComment ? '· "' + feedbackComment + '"' : ''}`
+      : '';
+
     const summary = `MyCommPal Practice Session with Vira
 Goal: ${goal}
 Audience: ${audience}
@@ -406,7 +440,7 @@ Retry Attempt:
 "${answer2}"
 
 Key Improvement:
-${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
+${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedbackLine}`;
 
     navigator.clipboard?.writeText(summary)
       .then(() => alert('Practice session summary copied to clipboard!'))
@@ -419,6 +453,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
       setAnswer2('');
       setAssessment(null);
       setComparison(null);
+      setFeedbackRating(null);
+      setFeedbackTags([]);
+      setFeedbackComment('');
+      setFeedbackSubmitted(false);
       setStep(0);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -430,6 +468,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
     setAnswer2('');
     setAssessment(null);
     setComparison(null);
+    setFeedbackRating(null);
+    setFeedbackTags([]);
+    setFeedbackComment('');
+    setFeedbackSubmitted(false);
     setStep(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1191,6 +1233,104 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
                     <div className="quote" style={{ borderLeftColor: '#1f9e76' }}>
                       <strong>Retry:</strong> “{answer2.slice(0, 120)}...”
                     </div>
+                  </div>
+
+                  {/* Quick User Feedback on Vira Guidance */}
+                  <div className="callout" style={{ background: '#fcfaff', border: '1.5px solid #ece4ff', marginTop: '18px' }}>
+                    {!feedbackSubmitted ? (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                          <strong style={{ fontSize: '14.5px', color: '#3f385c' }}>
+                            Was Vira&apos;s guidance helpful for this scenario?
+                          </strong>
+                          <span className="tiny" style={{ color: '#887c9c' }}>Quick 1-tap rating</span>
+                        </div>
+
+                        {/* 1 to 5 rating buttons */}
+                        <div style={{ display: 'flex', gap: '8px', margin: '10px 0', flexWrap: 'wrap' }}>
+                          {[
+                            { score: 1, label: '1 · Not really' },
+                            { score: 2, label: '2 · A little' },
+                            { score: 3, label: '3 · Helpful' },
+                            { score: 4, label: '4 · Very helpful' },
+                            { score: 5, label: '5 · Game changer! 🌟' },
+                          ].map(item => (
+                            <button
+                              key={item.score}
+                              type="button"
+                              className={`btn ${feedbackRating === item.score ? '' : 'ghost'}`}
+                              style={{ padding: '8px 12px', fontSize: '12.5px', borderRadius: '10px' }}
+                              onClick={() => setFeedbackRating(item.score)}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Quick tags & optional note once a rating is picked */}
+                        {feedbackRating !== null && (
+                          <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed #e9e3fa' }}>
+                            <div className="tiny" style={{ fontWeight: 700, color: '#6545e8', marginBottom: '6px' }}>
+                              What resonated most? (optional)
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                              {['Actionable framework', 'Relevant model script', 'Focus gap diagnosis', 'Before/After comparison'].map(tag => {
+                                const isSelected = feedbackTags.includes(tag);
+                                return (
+                                  <button
+                                    key={tag}
+                                    type="button"
+                                    className="tag"
+                                    style={{
+                                      cursor: 'pointer',
+                                      padding: '6px 12px',
+                                      fontSize: '12px',
+                                      background: isSelected ? '#7153de' : '#f0eaff',
+                                      color: isSelected ? 'white' : '#6443d6',
+                                      border: '0',
+                                      borderRadius: '99px',
+                                    }}
+                                    onClick={() => {
+                                      setFeedbackTags(prev =>
+                                        prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                                      );
+                                    }}
+                                  >
+                                    {isSelected ? '✓ ' : '+ '} {tag}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <input
+                              type="text"
+                              className="input"
+                              style={{ fontSize: '13px', padding: '9px 12px', borderRadius: '10px', marginBottom: '10px' }}
+                              placeholder="Any quick thoughts or suggestions for Vira? (optional)"
+                              value={feedbackComment}
+                              onChange={e => setFeedbackComment(e.target.value)}
+                            />
+
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              style={{ padding: '8px 18px', fontSize: '13px' }}
+                              onClick={handleSubmitFeedback}
+                              disabled={feedbackSubmitting}
+                            >
+                              {feedbackSubmitting ? 'Saving...' : 'Submit Feedback'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '10px 0', color: '#1f9e76' }}>
+                        <strong style={{ fontSize: '14.5px' }}>✨ Thank you for your feedback!</strong>
+                        <div className="tiny" style={{ marginTop: '4px', color: '#4d826a' }}>
+                          Your input helps Vira calibrate advice and become a sharper mentor for product managers.
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="actions">
