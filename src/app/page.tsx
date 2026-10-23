@@ -702,7 +702,6 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
                 </button>
               </>
             )}
-            <span className="pill">✦ Vercel Live Ready</span>
           </div>
         </div>
 
@@ -793,7 +792,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
                     onClick={() => setScenarioMode('vira')}
                   >
                     <strong>✨ Let Vira choose</strong>
-                    <span>Practice with a realistic PM stakeholder scenario</span>
+                    <span>Practice Real PM Conversations</span>
                   </button>
                   <button
                     type="button"
@@ -884,7 +883,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
                       <span className="spinner" /> Evaluating response...
                     </>
                   ) : (
-                    'Get Vira&apos;s feedback →'
+                    "Get Vira's feedback →"
                   )}
                 </button>
                 <button className="btn ghost" onClick={() => setStep(0)}>
