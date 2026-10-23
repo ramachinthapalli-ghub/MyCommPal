@@ -194,6 +194,63 @@ export function getGoalRubric(goal: string): GoalCriteriaDefinition {
   return GOAL_SPECIFIC_RUBRICS['Articulation'];
 }
 
+export function getShortScoreExplanation(dimension: string, score: number, goal?: string): string {
+  const clamped = Math.min(5, Math.max(1, Math.round(score))) as 1 | 2 | 3 | 4 | 5;
+  const d = dimension.toLowerCase();
+
+  if (d === 'clarity') {
+    switch (clamped) {
+      case 1: return 'Main message is unclear or echoes the prompt without taking a stance.';
+      case 2: return 'Point is buried under hesitation, passive phrasing, or preamble.';
+      case 3: return 'Main point is understandable, but lacks immediate executive punch.';
+      case 4: return 'Clear, direct recommendation established early with strong focus.';
+      case 5: return 'Crystal-clear headline delivery with zero ambiguity or hesitation.';
+    }
+  }
+
+  if (d === 'structure') {
+    switch (clamped) {
+      case 1: return 'Thoughts are disconnected without transitions or logical sequence.';
+      case 2: return 'Ideas jump between context and conclusion without connecting rationale.';
+      case 3: return 'Basic sequential order, but transitions between points could be tighter.';
+      case 4: return 'Follows a disciplined, recognizable communication framework.';
+      case 5: return 'Airtight narrative architecture with seamless logical progression.';
+    }
+  }
+
+  if (d === 'conciseness') {
+    switch (clamped) {
+      case 1: return 'Heavy verbal filler, repetition, or wandering tangents.';
+      case 2: return 'Either verbose with excessive preamble, or too sparse to convey key points.';
+      case 3: return 'Reasonable brevity, but retains minor conversational padding.';
+      case 4: return 'Tight, focused delivery with a high signal-to-noise ratio.';
+      case 5: return 'Surgical economy of language; every sentence adds distinct value.';
+    }
+  }
+
+  if (d.includes('align') || d === 'scenarioalignment') {
+    switch (clamped) {
+      case 1: return 'Did not address the prompt; spoke off-topic or merely echoed the question.';
+      case 2: return 'Mentions general buzzwords without answering the specific scenario requirements.';
+      case 3: return 'Partially addressed scenario, but omitted 1 or 2 explicit prompt elements.';
+      case 4: return 'Substantially complete; directly answered all required scenario elements.';
+      case 5: return 'Flawlessly aligned; comprehensively fulfilled every prompt requirement.';
+    }
+  }
+
+  // Goal-specific dimensions
+  const goalRubric = goal ? getGoalRubric(goal) : getGoalRubric(dimension);
+  if (goalRubric && goalRubric.levels[clamped]) {
+    // Return first sentence of level anchor
+    const full = goalRubric.levels[clamped];
+    const firstSentence = full.split(/[:.]/)[1]?.trim() || full;
+    return firstSentence.length > 10 ? firstSentence : full;
+  }
+
+  return `Evaluated as Level ${clamped} based on standard communication anchors.`;
+}
+
+
 export function formatRubricsForSystemPrompt(): string {
   let promptText = `### LAYER A: CORE COMMUNICATION SKILLS (1-5 SCALE)\n`;
   for (const [key, dim] of Object.entries(CORE_SKILL_RUBRICS)) {

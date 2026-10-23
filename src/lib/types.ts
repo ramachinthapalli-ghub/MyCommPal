@@ -101,6 +101,13 @@ export interface MentorAssessRequest {
 
 export interface MentorAssessResponse {
   scores: Scores; // Layer A
+  scoreExplanations?: {
+    clarity: string;
+    structure: string;
+    conciseness: string;
+    scenarioAlignment?: string;
+    goalEffectiveness?: string;
+  };
   goalEffectiveness: GoalEffectiveness; // Layer B
   scenarioAlignment: ScenarioAlignment; // Prompt requirement fulfillment
   strongest: 'clarity' | 'structure' | 'conciseness';
@@ -157,10 +164,16 @@ export interface MentorCompareResponse {
   verdict: 'improved' | 'similar' | 'declined' | 'less clear';
   meaningPreserved: boolean;
   meaningNote: string;
-  tradeOffAnalysis?: string; // Explicitly recognizes trade-offs (e.g. clarity improved, storytelling declined)
+  progressInsight?: string; // Vira's concise, prominent progress insight
+  tradeOffAnalysis?: string; // Multi-dimensional trade-off explanation
   whatImproved: string;
   stillNeedsWork: string;
   nextStep: string;
+  nextChallenge?: {
+    title: string;
+    exercise: string;
+    sentenceStarter?: string;
+  };
   savedSessionId?: string;
   userFeedback?: {
     rating: number;

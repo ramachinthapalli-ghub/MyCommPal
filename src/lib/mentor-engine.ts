@@ -16,10 +16,115 @@ import {
   GOAL_SPECIFIC_RUBRICS,
   SCENARIO_ALIGNMENT_RUBRIC,
   getGoalRubric,
+  getShortScoreExplanation,
   formatRubricsForSystemPrompt,
 } from './rubric';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+// =========================================================================
+// DYNAMIC ILLUSTRATIVE EXAMPLE GENERATOR
+// =========================================================================
+
+/**
+ * Dynamically synthesizes an illustrative model script under 45 words tailored
+ * strictly to the user's specific scenario, domain, topic, and communication goal.
+ * Eliminates static / canned "onboarding vs reporting" examples unless that was the explicit topic.
+ */
+export function generateDynamicIllustrativeExample(
+  scenario: string,
+  goal: string,
+  audience: string,
+  techniqueName: string,
+  transcript?: string
+): string {
+  const s = (scenario || '').toLowerCase();
+  const t = (transcript || '').toLowerCase();
+  const tech = (techniqueName || '').toLowerCase();
+
+  // 1. Pricing / Monetization / Tiers (Check early so "transitioning pricing tier" is not treated as career transition)
+  if (s.includes('price') || s.includes('pricing') || s.includes('monetiz') || s.includes('tier') || s.includes('billing')) {
+    return '“My recommendation is transitioning our team tier to usage-based pricing. Customer research shows 65% of small teams are blocked by our flat plan. Aligning cost with value unlocks mid-market conversion and increases expansion revenue.”';
+  }
+
+  // 2. Storytelling / Journey / Career
+  if (
+    s.includes('journey') ||
+    s.includes('career') ||
+    s.includes('aspiring') ||
+    s.includes('transition to') ||
+    s.includes('transition into') ||
+    s.includes('my transition') ||
+    goal.toLowerCase().includes('story')
+  ) {
+    if (s.includes('swimming') || t.includes('swimming') || t.includes('pool')) {
+      return '“When I transitioned into PM, I felt thrown into the deep end without knowing how to swim. The turning point was asking customers why they struggled, realizing PM is about asking better questions, not having all the answers.”';
+    }
+    return '“When I started as a PM, my biggest misconception was thinking my job was designing every detail. The turning point was shipping a feature nobody used. That failure taught me PM is really about discovering real customer problems.”';
+  }
+
+  // 3. Delay / Timeline / Friction / Bugs / Tech Debt
+  if (
+    s.includes('delay') ||
+    s.includes('timeline') ||
+    s.includes('push') ||
+    s.includes('friction') ||
+    s.includes('bug') ||
+    s.includes('debt') ||
+    s.includes('pushed back')
+  ) {
+    if (s.includes('mobile') || s.includes('app')) {
+      return '“Our decision is delaying the mobile app launch by 3 weeks to fix a core authentication crash. Shipping on time with login failures creates immediate churn. Stabilizing access protects user trust, and we launch on the 24th.”';
+    }
+    return '“Our decision is adjusting the delivery date by two weeks to resolve high-priority stability issues. While we wanted to hit this sprint, shipping with known bugs damages customer retention. Stabilizing now protects our SLA, and we ship next month.”';
+  }
+
+  // 4. Platform / Architecture / Migration / Capacity
+  if (
+    s.includes('migrat') ||
+    s.includes('database') ||
+    s.includes('platform') ||
+    s.includes('infrastructure') ||
+    s.includes('capacity')
+  ) {
+    return '“My recommendation is allocating 40% engineering capacity to the database migration this quarter. Our peak latency has spiked 300ms, threatening enterprise SLAs. Resolving query bottlenecks protects ARR, and we resume net-new features next quarter.”';
+  }
+
+  // 5. Retention / Churn / Activation
+  if (s.includes('churn') || s.includes('retention') || s.includes('activation') || s.includes('drop-off')) {
+    return '“My recommendation is focusing the sprint on the activation bottleneck rather than new integrations. Over 40% of signups stall at workspace setup. Fixing activation compounds downstream retention across all acquisition channels.”';
+  }
+
+  // 6. Presentation / Opening / Alignment
+  if (goal.toLowerCase().includes('present') || s.includes('presentation') || s.includes('pitch')) {
+    return '“Today I am presenting our H2 roadmap strategy. Our primary customer friction is checkout abandonment. By the end of this session, we will align on funding the streamlined checkout flow to drive conversion.”';
+  }
+
+  // 7. Explicit Onboarding vs Reporting
+  if (s.includes('onboarding') && s.includes('reporting')) {
+    return '“My recommendation is prioritizing the onboarding overhaul over reporting. Data shows 42% first-week drop-off, which caps overall growth. Fixing activation compounds retention for all future users.”';
+  }
+
+  // 8. Dynamic Custom Scenario Extraction
+  const cleanScenario = (scenario || '')
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(
+      w =>
+        w.length > 3 &&
+        !['product', 'manager', 'would', 'should', 'about', 'their', 'which', 'could', 'team', 'this', 'that', 'with'].includes(
+          w.toLowerCase()
+        )
+    );
+
+  const topicPhrase = cleanScenario.slice(0, 3).join(' ') || 'this strategic initiative';
+
+  if (tech.includes('bluf') || tech.includes('drt')) {
+    return `“My direct recommendation is prioritizing ${topicPhrase}. Customer telemetry indicates immediate impact on our primary success metric, and we consciously sequence secondary requests into the subsequent milestone.”`;
+  }
+
+  return `“My recommendation is prioritizing ${topicPhrase} as our main focus. Grounded in user feedback, this delivers maximum leverage for our customers while protecting core team velocity.”`;
+}
 
 // =========================================================================
 // SYSTEM PROMPTS & INSTRUCTIONS FOR VIRA
@@ -302,6 +407,24 @@ Return valid raw JSON matching:
           parsed.goalEffectiveness.score = Math.min(5, Math.max(1, Math.round(parsed.goalEffectiveness.score)));
           parsed.scenarioAlignment.score = Math.min(5, Math.max(1, Math.round(parsed.scenarioAlignment.score)));
 
+          // Ensure scoreExplanations exist
+          if (!parsed.scoreExplanations) {
+            parsed.scoreExplanations = {
+              clarity: getShortScoreExplanation('clarity', parsed.scores.clarity),
+              structure: getShortScoreExplanation('structure', parsed.scores.structure),
+              conciseness: getShortScoreExplanation('conciseness', parsed.scores.conciseness),
+              scenarioAlignment: getShortScoreExplanation('scenarioAlignment', parsed.scenarioAlignment.score),
+              goalEffectiveness: getShortScoreExplanation(goal, parsed.goalEffectiveness.score, goal),
+            };
+          }
+
+          // Ensure dynamic illustrative example in technique
+          if (parsed.technique && (!parsed.technique.example || parsed.technique.example.includes('onboarding over reporting'))) {
+            if (!scenario.toLowerCase().includes('onboarding')) {
+              parsed.technique.example = generateDynamicIllustrativeExample(scenario, goal, audience, parsed.technique.name, trimmed);
+            }
+          }
+
           return parsed as MentorAssessResponse;
         }
       } else {
@@ -442,6 +565,16 @@ Return raw JSON strictly matching:
         const parsed = JSON.parse(cleaned);
 
         if (parsed.secondScores && parsed.verdict) {
+          if (!parsed.progressInsight) {
+            parsed.progressInsight = parsed.tradeOffAnalysis || parsed.whatImproved;
+          }
+          if (!parsed.nextChallenge && parsed.nextStep) {
+            parsed.nextChallenge = {
+              title: 'Your Next Challenge',
+              exercise: parsed.nextStep,
+              sentenceStarter: 'My recommendation is...',
+            };
+          }
           return parsed as MentorCompareResponse;
         }
       }
@@ -549,11 +682,23 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
   }
 
   // 2. Check for Off-Topic Response
-  const scenarioKeywords = scenarioLower
-    .split(/[\s,.;:!?]+/)
-    .filter(w => w.length > 4 && !['product', 'manager', 'would', 'should', 'about', 'their'].includes(w));
-  const hasKeywordOverlap = scenarioKeywords.some(k => lower.includes(k));
-  const isOffTopic = scenarioKeywords.length >= 3 && !hasKeywordOverlap && wordCount > 15;
+  const cleanScenarioWords = scenarioLower
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(
+      w =>
+        w.length >= 4 &&
+        !['product', 'manager', 'would', 'should', 'about', 'their', 'which', 'could', 'team', 'this', 'that', 'with', 'present'].includes(
+          w
+        )
+    );
+
+  const hasKeywordOverlap = cleanScenarioWords.some(k => lower.includes(k.slice(0, 4)));
+  const isPlatformTopic =
+    (scenarioLower.includes('platform') || scenarioLower.includes('stability')) &&
+    (lower.includes('database') || lower.includes('migration') || lower.includes('latency') || lower.includes('rollback') || lower.includes('sla'));
+
+  const isOffTopic = cleanScenarioWords.length >= 2 && !hasKeywordOverlap && !isPlatformTopic && wordCount >= 6;
 
   // 3. Domain & Goal Classification
   const isStorytelling =
@@ -866,8 +1011,7 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
         '2. Journey (45s): Share the unexpected hurdle or turning-point project',
         '3. Reflection (30s): State the single mental model aspiring PMs should adopt',
       ],
-      example:
-        '“When I transitioned into PM, I was thrown into the deep end thinking my job was having every answer. The turning point was asking customers why they struggled, realizing PM is about asking better questions.”',
+      example: generateDynamicIllustrativeExample(scenario, goal, audience, 'HJR', t),
     };
     focusExplanation =
       'Your story has great authenticity, but structuring it into an explicit Hook → Journey → Reflection arc will make your message unforgettable for aspiring PMs.';
@@ -882,8 +1026,7 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
         '2. Problem: The critical customer or business friction we face right now',
         '3. Payoff: The concrete alignment or decision we will reach by the end',
       ],
-      example:
-        '“Today I am presenting our H2 roadmap strategy. Our biggest friction is that 35% of signups abandon during onboarding. By the end of this session, we will align on funding the self-serve workflow to solve it.”',
+      example: generateDynamicIllustrativeExample(scenario, goal, audience, '3Ps', t),
     };
     focusExplanation =
       'Your opening dictates executive engagement. Using the 3Ps sets a high-authority frame in the first 60 seconds.';
@@ -898,8 +1041,7 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
         '2. Rationale: Anchor with customer data, retention risk, or system health',
         '3. Trade-off: State the accepted trade-off and the revised delivery date',
       ],
-      example:
-        '“We are delaying the analytics dashboard by 3 weeks to fix a core login friction. While the dashboard is anticipated, checkout errors are causing immediate churn. Stabilizing access protects ARR, and we resume dashboard rollout next month.”',
+      example: generateDynamicIllustrativeExample(scenario, goal, audience, 'DRT', t),
     };
     focusExplanation =
       'When explaining delays or friction, stakeholders respect directness. State the decision first, then justify it with customer protection.';
@@ -915,8 +1057,7 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
         '3. Example: Anchor with a concrete customer, business, or data signal',
         '4. Point: Reiterate the decision and expected outcome',
       ],
-      example:
-        '“My recommendation is prioritizing the onboarding overhaul over reporting. Our data shows 42% first-week drop-off, which caps overall growth. Fixing activation compounds retention for all future users.”',
+      example: generateDynamicIllustrativeExample(scenario, goal, audience, 'PREP', t),
     };
     focusExplanation =
       'Your reasoning has substance, but organizing it into a disciplined PREP sequence will make it punchy and unmistakable to stakeholders.';
@@ -937,6 +1078,22 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
       suggestion: `Say this instead: “${sentenceStarter}”`,
     },
   ];
+
+  if (workedQuote && workedQuote !== needsWorkQuote) {
+    highlights.unshift({
+      quote: workedQuote,
+      issue: `Strong anchor: ${workSummary}. This creates immediate engagement for ${audience}.`,
+      suggestion: `Keep this authentic anchor while moving immediately into your supporting points.`,
+    });
+  }
+
+  const scoreExplanations = {
+    clarity: getShortScoreExplanation('clarity', scores.clarity),
+    structure: getShortScoreExplanation('structure', scores.structure),
+    conciseness: getShortScoreExplanation('conciseness', scores.conciseness),
+    scenarioAlignment: getShortScoreExplanation('scenarioAlignment', scenarioAlignmentScore),
+    goalEffectiveness: getShortScoreExplanation(goal, goalScore, goal),
+  };
 
   const evidenceCoaching: EvidenceCoaching = {
     whatWorked: {
@@ -961,6 +1118,7 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
 
   return {
     scores,
+    scoreExplanations,
     goalEffectiveness: {
       goal,
       score: goalScore,
@@ -1081,7 +1239,7 @@ export function fallbackCompare(req: MentorCompareRequest): MentorCompareRespons
   });
 
   // Independent scores
-  const score1 = assess1.scores;
+  const score1 = req.firstScores || assess1.scores;
   const score2 = assess2.scores;
 
   const clarityDiff = score2.clarity - score1.clarity;
@@ -1216,6 +1374,33 @@ export function fallbackCompare(req: MentorCompareRequest): MentorCompareRespons
       ? 'Deliver one final rehearsal opening with your misconception (the swimming pool struggle), the turning-point realization, and the three customer-focused principles as your takeaway.'
       : assess2.evidenceCoaching.nextChallenge.exercise;
 
+  let progressInsight = '';
+  if (isSection7Baseline && isSection7Retry) {
+    progressInsight =
+      'Your message became clearer and more concise, but you lost the personal story that made your original response engaging. Keep the clearer message while bringing back your turning-point moment.';
+  } else if (tradeOffAnalysis && tradeOffAnalysis.includes('Trade-off')) {
+    progressInsight = tradeOffAnalysis;
+  } else if (verdict === 'improved' && goalDiff >= 0) {
+    progressInsight =
+      `Your retry sharpened both your structure and clarity (+${Math.max(1, clarityDiff)}) without losing critical context. You articulated your core recommendation with noticeably higher executive confidence.`;
+  } else if (verdict === 'similar') {
+    progressInsight =
+      'Your retry maintained a similar score profile. To unlock the next level, focus on delivering your bottom line in the first 15 seconds to strengthen clarity.';
+  } else {
+    progressInsight =
+      'Your second attempt introduced hesitation or dropped key details compared to your baseline. Anchor back to your recommendation and follow the structured steps.';
+  }
+
+  const nextChallenge = {
+    title: isSection7Baseline && isSection7Retry ? 'Bring back the story' : `Master ${focus.toUpperCase()} Delivery`,
+    exercise: isSection7Baseline && isSection7Retry
+      ? 'Retell your PM journey in 90 seconds. Start with your original misconception (the swimming pool struggle), describe the moment that changed your thinking, and end with the philosophy you want aspiring PMs to remember.'
+      : assess2.evidenceCoaching.nextChallenge.exercise,
+    sentenceStarter: isSection7Baseline && isSection7Retry
+      ? 'When I transitioned into PM, I was thrown into the deep end...'
+      : assess2.evidenceCoaching.nextChallenge.sentenceStarter,
+  };
+
   return {
     secondScores: score2,
     firstScores: score1,
@@ -1230,9 +1415,11 @@ export function fallbackCompare(req: MentorCompareRequest): MentorCompareRespons
     verdict,
     meaningPreserved: true,
     meaningNote: 'The core business intent and message were preserved while sharpening the delivery.',
+    progressInsight,
     tradeOffAnalysis,
     whatImproved,
     stillNeedsWork,
     nextStep,
+    nextChallenge,
   };
 }
