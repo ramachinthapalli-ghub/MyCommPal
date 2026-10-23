@@ -1,0 +1,1196 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  UserProfile,
+  GoalType,
+  Scores,
+  Highlight,
+  Technique,
+  PracticePlan,
+  MentorAssessResponse,
+  MentorCompareResponse,
+  PracticeSessionRecord,
+} from '@/lib/types';
+
+const SCENARIOS: Record<GoalType, string[]> = {
+  Articulation: [
+    "You're a Product Manager. Your VP asks: ‘Our team can build either an onboarding improvement or a reporting feature this quarter. Which would you prioritize, and why?’ Explain your thinking in about 60 seconds.",
+    "A stakeholder asks why you are delaying a requested feature to address customer-reported friction. Explain your recommendation and its trade-offs.",
+  ],
+  Storytelling: [
+    "Tell the story of a product problem you discovered, the decision you made, and the impact it had. Imagine explaining it to other PMs at a meetup.",
+    "Tell the story of a time stakeholder feedback changed your product direction. What was at stake and what did you learn?",
+  ],
+  Presentations: [
+    "You have 60 seconds to open a presentation proposing a product improvement. What is the customer problem, why now, and what do you want the audience to do?",
+    "Introduce a product experiment to leadership. Explain the customer problem, proposed test, and what success would mean.",
+  ],
+};
+
+const STEP_TITLES = ['My goal', 'Assess me', 'My plan', 'Practice'];
+
+export default function MyCommPalApp() {
+  // User Authentication State
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authTab, setAuthTab] = useState<'guest' | 'email' | 'phone'>('guest');
+  const [authIdentifier, setAuthIdentifier] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpDevHint, setOtpDevHint] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Flow State
+  const [step, setStep] = useState(0);
+  const [goal, setGoal] = useState<GoalType>('Articulation');
+  const [audience, setAudience] = useState('Cross-functional stakeholders');
+  const [scenarioMode, setScenarioMode] = useState<'vira' | 'mine'>('vira');
+  const [scenarioIndex, setScenarioIndex] = useState(0);
+  const [customSituation, setCustomSituation] = useState('');
+
+  // Speech & Text input state
+  const [answer1, setAnswer1] = useState('');
+  const [answer2, setAnswer2] = useState('');
+  const [isRecording1, setIsRecording1] = useState(false);
+  const [isRecording2, setIsRecording2] = useState(false);
+  const [recTimer1, setRecTimer1] = useState('00:00');
+  const [recTimer2, setRecTimer2] = useState('00:00');
+  const recognitionRef = useRef<any>(null);
+  const timerIntervalRef = useRef<any>(null);
+
+  // Mentor Assessment state
+  const [assessing, setAssessing] = useState(false);
+  const [assessment, setAssessment] = useState<MentorAssessResponse | null>(null);
+
+  // Practice Plan state
+  const [planMinutes, setPlanMinutes] = useState(5);
+  const [planFrequency, setPlanFrequency] = useState(3);
+
+  // Comparison State
+  const [comparing, setComparing] = useState(false);
+  const [comparison, setComparison] = useState<MentorCompareResponse | null>(null);
+
+  // History State
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historySessions, setHistorySessions] = useState<PracticeSessionRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Initial Auth Check
+  useEffect(() => {
+    checkCurrentUser();
+  }, []);
+
+  async function checkCurrentUser() {
+    try {
+      setAuthLoading(true);
+      const res = await fetch('/api/auth/me');
+      const data = await res.json();
+      if (data.user) {
+        setUser(data.user);
+      } else {
+        // Auto initialize as guest for immediate friction-free testing
+        loginAsGuest();
+      }
+    } catch (e) {
+      console.error('Failed to check user:', e);
+      loginAsGuest();
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  // Auth Handlers
+  async function loginAsGuest() {
+    try {
+      setAuthLoading(true);
+      const res = await fetch('/api/auth/guest', { method: 'POST' });
+      const data = await res.json();
+      if (data.user) {
+        setUser(data.user);
+        setShowAuthModal(false);
+      }
+    } catch (e) {
+      console.error('Guest login failed:', e);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError(null);
+    if (!authIdentifier.trim()) {
+      setAuthError('Please enter your email or phone number.');
+      return;
+    }
+
+    try {
+      setOtpSending(true);
+      const res = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: authIdentifier.trim(), type: authTab }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
+
+      setOtpSent(true);
+      if (data.devCode) {
+        setOtpDevHint(`Test code: ${data.devCode}`);
+        setOtpCode(data.devCode); // Auto-fill for convenience
+      }
+    } catch (err: any) {
+      setAuthError(err.message);
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError(null);
+    if (!otpCode.trim()) {
+      setAuthError('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    try {
+      setOtpVerifying(true);
+      const res = await fetch('/api/auth/otp', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: authIdentifier.trim(), code: otpCode.trim(), type: authTab }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid OTP code');
+
+      setUser(data.user);
+      setShowAuthModal(false);
+      setOtpSent(false);
+      setOtpDevHint(null);
+      setAuthIdentifier('');
+      setOtpCode('');
+    } catch (err: any) {
+      setAuthError(err.message);
+    } finally {
+      setOtpVerifying(false);
+    }
+  }
+
+  async function handleLogout() {
+    await fetch('/api/auth/me', { method: 'DELETE' });
+    setUser(null);
+    setShowAuthModal(true);
+  }
+
+  async function loadHistory() {
+    try {
+      setHistoryLoading(true);
+      setShowHistoryModal(true);
+      const res = await fetch('/api/sessions');
+      const data = await res.json();
+      setHistorySessions(data.sessions || []);
+    } catch (e) {
+      console.error('Failed to load history:', e);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  // Computed Current Scenario
+  const currentScenarioText =
+    scenarioMode === 'mine'
+      ? customSituation.trim()
+        ? `Your real situation: ${customSituation.trim()}\n\nVira: Explain what you would say to your audience. Start with your main point, then your reasoning and desired outcome.`
+        : 'Describe your upcoming situation above to practice with your own challenge.'
+      : SCENARIOS[goal][scenarioIndex % SCENARIOS[goal].length];
+
+  // Speech Recognition
+  function toggleSpeech(inputIndex: 1 | 2) {
+    const isRecording = inputIndex === 1 ? isRecording1 : isRecording2;
+
+    if (isRecording) {
+      stopSpeech();
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert('Speech transcription is not supported in this browser. Please type your response directly.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      const baseText = inputIndex === 1 ? answer1 : answer2;
+      let finalized = '';
+      const startTime = Date.now();
+
+      if (inputIndex === 1) setIsRecording1(true);
+      else setIsRecording2(true);
+
+      timerIntervalRef.current = setInterval(() => {
+        const sec = Math.floor((Date.now() - startTime) / 1000);
+        const formatted = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+        if (inputIndex === 1) setRecTimer1(formatted);
+        else setRecTimer2(formatted);
+      }, 250);
+
+      recognition.onresult = (event: any) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const t = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalized += t + ' ';
+          else interim += t;
+        }
+        const updated = [baseText, finalized, interim].filter(Boolean).join(' ').trim();
+        if (inputIndex === 1) setAnswer1(updated);
+        else setAnswer2(updated);
+      };
+
+      recognition.onerror = (e: any) => {
+        console.warn('Speech error:', e.error);
+        stopSpeech();
+      };
+
+      recognition.onend = () => {
+        stopSpeech();
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.error('Speech recognition failed to start:', e);
+      stopSpeech();
+      alert('Could not access microphone. Please type your answer instead.');
+    }
+  }
+
+  function stopSpeech() {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      recognitionRef.current = null;
+    }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    setIsRecording1(false);
+    setIsRecording2(false);
+  }
+
+  // Assessment Step Handlers
+  async function handleAssess() {
+    stopSpeech();
+    if (scenarioMode === 'mine' && customSituation.trim().length < 15) {
+      alert('Please describe your upcoming situation in a little more detail (at least 15 characters).');
+      return;
+    }
+
+    if (answer1.trim().length < 35) {
+      alert('Please share a little more of your thinking (at least 35 characters) so Vira can give calibrated feedback.');
+      return;
+    }
+
+    try {
+      setAssessing(true);
+      const res = await fetch('/api/mentor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'assess',
+          goal,
+          audience,
+          scenario: currentScenarioText,
+          transcript: answer1.trim(),
+          scenarioMode,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to evaluate response');
+
+      setAssessment(data);
+      setStep(2);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e: any) {
+      alert(e.message || 'Something went wrong. Please retry.');
+    } finally {
+      setAssessing(false);
+    }
+  }
+
+  // Comparison Step Handlers
+  async function handleCompare() {
+    stopSpeech();
+    if (answer2.trim().length < 35) {
+      alert('Please complete your retry attempt (at least 35 characters) before comparing.');
+      return;
+    }
+
+    if (!assessment) return;
+
+    try {
+      setComparing(true);
+      const res = await fetch('/api/mentor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'compare',
+          goal,
+          audience,
+          scenario: currentScenarioText,
+          firstTranscript: answer1.trim(),
+          secondTranscript: answer2.trim(),
+          focus: assessment.focus,
+          firstScores: assessment.scores,
+          practicePlan: { minutes: planMinutes, frequency: planFrequency },
+          assessment,
+          scenarioMode,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to compare responses');
+
+      setComparison(data);
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    } catch (e: any) {
+      alert(e.message || 'Comparison failed. Please retry.');
+    } finally {
+      setComparing(false);
+    }
+  }
+
+  function handleCopySummary() {
+    const summary = `MyCommPal Practice Session with Vira
+Goal: ${goal}
+Audience: ${audience}
+Scenario: ${currentScenarioText}
+Focus Skill: ${assessment?.focus || 'Structure'}
+Initial Score: ${assessment?.scores[assessment.focus]} / 5
+Retry Score: ${comparison?.focusAfter || 'N/A'} / 5
+Verdict: ${comparison?.verdict || 'N/A'}
+
+Baseline Attempt:
+"${answer1}"
+
+Retry Attempt:
+"${answer2}"
+
+Key Improvement:
+${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
+
+    navigator.clipboard?.writeText(summary)
+      .then(() => alert('Practice session summary copied to clipboard!'))
+      .catch(() => alert('Clipboard access unavailable.'));
+  }
+
+  function handleStartOver() {
+    if (confirm('Start a fresh practice session? Your past completed sessions remain safely stored in your history.')) {
+      setAnswer1('');
+      setAnswer2('');
+      setAssessment(null);
+      setComparison(null);
+      setStep(0);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function handleNextScenario() {
+    setScenarioIndex(prev => prev + 1);
+    setAnswer1('');
+    setAnswer2('');
+    setAssessment(null);
+    setComparison(null);
+    setStep(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  return (
+    <div className="shell">
+      {/* Sidebar Navigation */}
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-logo">✨</span>
+          <span className="wordmark">
+            My<span>Comm</span>Pal
+          </span>
+        </div>
+        <div className="tiny">Your personal AI communication mentor</div>
+
+        {/* Steps */}
+        <div className="steps">
+          {STEP_TITLES.map((title, i) => {
+            const isActive = step === i;
+            const isDone = step > i;
+            return (
+              <div
+                key={title}
+                className={`step ${isActive ? 'active' : ''} ${isDone ? 'done' : ''}`}
+                onClick={() => {
+                  if (i <= step) {
+                    stopSpeech();
+                    setStep(i);
+                  }
+                }}
+              >
+                <span>{isDone ? '✓' : i + 1}</span>
+                {title}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom Profile Widget */}
+        <div className="sidebar-bottom">
+          <div className="side-profile">
+            <span className="avatar">👩‍💼</span>
+            <div>
+              <b>Meet Vira</b>
+              <div className="tiny">Your articulation mentor</div>
+            </div>
+          </div>
+          “No perfect answers needed. We'll make your ideas clearer, together.”
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="main">
+        {/* Top Header Bar */}
+        <div className="top">
+          <span className="eyebrow">PRACTICE WITH VIRA · SPEAK WITH IMPACT</span>
+          <div className="top-actions">
+            {user ? (
+              <>
+                <span className={`badge ${user.authType === 'guest' ? 'guest' : 'verified'}`}>
+                  {user.authType === 'guest' ? '👤 Guest' : user.authType === 'phone' ? '📱' : '✉️'}{' '}
+                  {user.identifier}
+                </span>
+                <button className="btn ghost" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={loadHistory}>
+                  📜 History
+                </button>
+                <button className="btn ghost" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={handleLogout}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <button className="btn secondary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setShowAuthModal(true)}>
+                Sign in / Register
+              </button>
+            )}
+            <span className="pill">✦ Vercel Live Ready</span>
+          </div>
+        </div>
+
+        {/* Dynamic Panels */}
+        <div className="panel">
+          {/* SCREEN 01: YOUR GOAL */}
+          {step === 0 && (
+            <section>
+              <span className="eyebrow">01 / YOUR GOAL</span>
+              <h1>Grow your voice. Grow your impact.</h1>
+              <p>
+                Meet Vira, your personal AI communication mentor. Practice realistic product management conversations,
+                get targeted feedback, and strengthen your articulation one session at a time.
+              </p>
+
+              <div className="vira">
+                <span className="avatar">👩‍💼</span>
+                <div className="bubble">
+                  <b>Vira</b>
+                  <p>Hi there! What communication skill would you like us to work on together today?</p>
+                </div>
+              </div>
+
+              {/* Goal Cards */}
+              <div className="cards">
+                <button
+                  type="button"
+                  className={`option ${goal === 'Articulation' ? 'selected' : ''}`}
+                  onClick={() => setGoal('Articulation')}
+                >
+                  <strong>💬</strong>
+                  Articulate my ideas
+                </button>
+                <button
+                  type="button"
+                  className={`option ${goal === 'Storytelling' ? 'selected' : ''}`}
+                  onClick={() => setGoal('Storytelling')}
+                >
+                  <strong>📖</strong>
+                  Tell stronger stories
+                </button>
+                <button
+                  type="button"
+                  className={`option ${goal === 'Presentations' ? 'selected' : ''}`}
+                  onClick={() => setGoal('Presentations')}
+                >
+                  <strong>🎤</strong>
+                  Present with impact
+                </button>
+              </div>
+
+              {/* Target Audience Dropdown */}
+              <label className="field" htmlFor="audienceSelect">
+                Who do you usually communicate with?
+              </label>
+              <select
+                id="audienceSelect"
+                value={audience}
+                onChange={e => setAudience(e.target.value)}
+              >
+                <option value="Cross-functional stakeholders">Cross-functional stakeholders</option>
+                <option value="Leadership and executives">Leadership and executives</option>
+                <option value="Product peers and colleagues">Product peers and colleagues</option>
+              </select>
+
+              <div className="actions">
+                <button className="btn" onClick={() => setStep(1)}>
+                  Meet my challenge →
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* SCREEN 02: ASSESS ME */}
+          {step === 1 && (
+            <section>
+              <span className="eyebrow">02 / ASSESS ME</span>
+              <h1>Let&apos;s hear your thinking.</h1>
+              <p>Answer naturally. You don&apos;t need a polished speech—this is your baseline, not a test.</p>
+
+              {/* Practice Mode Choice */}
+              <div className="scenario-choice">
+                <div className="scenario-choice-title">How would you like to practice?</div>
+                <div className="scenario-options">
+                  <button
+                    type="button"
+                    className={`scenario-option ${scenarioMode === 'vira' ? 'active' : ''}`}
+                    onClick={() => setScenarioMode('vira')}
+                  >
+                    <strong>✨ Let Vira choose</strong>
+                    <span>Practice with a realistic PM stakeholder scenario</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`scenario-option ${scenarioMode === 'mine' ? 'active' : ''}`}
+                    onClick={() => setScenarioMode('mine')}
+                  >
+                    <strong>✍️ Bring my situation</strong>
+                    <span>Prepare for an actual conversation coming up</span>
+                  </button>
+                </div>
+
+                {scenarioMode === 'mine' && (
+                  <div style={{ marginTop: '12px' }}>
+                    <label className="field" htmlFor="mySituation">
+                      Describe your upcoming situation
+                    </label>
+                    <textarea
+                      id="mySituation"
+                      placeholder="Example: Tomorrow my VP will ask why we delayed a feature. I need to explain the customer impact and trade-offs."
+                      rows={3}
+                      value={customSituation}
+                      onChange={e => setCustomSituation(e.target.value)}
+                    />
+                    <div className="small" style={{ marginTop: '6px' }}>
+                      Share the audience, situation, and what you need to communicate. Avoid confidential details.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Vira Scenario Card */}
+              <div className="vira">
+                <span className="avatar">👩‍💼</span>
+                <div className="bubble">
+                  <b>Vira</b>
+                  <p style={{ whiteSpace: 'pre-line' }}>{currentScenarioText}</p>
+                </div>
+              </div>
+
+              {/* Speech Input Box */}
+              <div className="speech">
+                <div className="tiny" style={{ textAlign: 'center', fontWeight: 700, color: '#6545e8' }}>
+                  {isRecording1 ? 'Listening… speak your answer clearly' : 'Tap mic to speak, or type below'}
+                </div>
+                <div className="record">
+                  <button
+                    type="button"
+                    className={`mic ${isRecording1 ? 'recording' : ''}`}
+                    onClick={() => toggleSpeech(1)}
+                    title="Tap to speak"
+                  >
+                    🎙️
+                  </button>
+                  {isRecording1 && <span className="counter">{recTimer1}</span>}
+                </div>
+
+                <label className="field" htmlFor="answer1">
+                  Your baseline response
+                </label>
+                <textarea
+                  id="answer1"
+                  placeholder="Speak with the mic or type your answer here... (minimum 35 characters)"
+                  value={answer1}
+                  onChange={e => setAnswer1(e.target.value)}
+                />
+                <div className="small" style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{answer1.length} characters (min 35)</span>
+                  {scenarioMode === 'vira' && (
+                    <button
+                      type="button"
+                      className="reset"
+                      onClick={() => setScenarioIndex(prev => prev + 1)}
+                    >
+                      🎲 Try another PM scenario
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="actions">
+                <button
+                  className="btn"
+                  disabled={assessing || answer1.trim().length < 35}
+                  onClick={handleAssess}
+                >
+                  {assessing ? (
+                    <>
+                      <span className="spinner" /> Evaluating response...
+                    </>
+                  ) : (
+                    'Get Vira&apos;s feedback →'
+                  )}
+                </button>
+                <button className="btn ghost" onClick={() => setStep(0)}>
+                  ← Back to Goal
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* SCREEN 03: YOUR PERSONAL PLAN */}
+          {step === 2 && assessment && (
+            <section>
+              <span className="eyebrow">03 / YOUR PERSONAL PLAN</span>
+              <h1>Here&apos;s how we&apos;ll grow.</h1>
+              <p>
+                I listened to your answer. Rather than trying to change all your speaking habits at once,
+                we&apos;ll focus on one targeted communication technique.
+              </p>
+
+              {/* Mentor Feedback Bubble */}
+              <div className="vira">
+                <span className="avatar">👩‍💼</span>
+                <div className="bubble">
+                  <b>Vira</b>
+                  <p>
+                    I heard your answer! Your highest scoring area was{' '}
+                    <strong>{assessment.strongest}</strong>. Our first practice focus is{' '}
+                    <strong>{assessment.focus}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Rubric Score Bars */}
+              <h2>Communication Signal Baseline</h2>
+              <div className="skill">
+                <div className="skill-name">Clarity</div>
+                <div className="bar">
+                  <div className="fill" style={{ width: `${(assessment.scores.clarity / 5) * 100}%` }} />
+                </div>
+                <div className="score">{assessment.scores.clarity}/5</div>
+              </div>
+
+              <div className="skill">
+                <div className="skill-name">Structure</div>
+                <div className="bar">
+                  <div className="fill" style={{ width: `${(assessment.scores.structure / 5) * 100}%` }} />
+                </div>
+                <div className="score">{assessment.scores.structure}/5</div>
+              </div>
+
+              <div className="skill">
+                <div className="skill-name">Conciseness</div>
+                <div className="bar">
+                  <div className="fill" style={{ width: `${(assessment.scores.conciseness / 5) * 100}%` }} />
+                </div>
+                <div className="score">{assessment.scores.conciseness}/5</div>
+              </div>
+
+              {/* Focus Skill Card */}
+              <div className="callout" style={{ borderLeft: '4px solid #7153de' }}>
+                <h3>Focus: {assessment.focus.toUpperCase()}</h3>
+                <p>{assessment.focusExplanation}</p>
+              </div>
+
+              {/* Verbatim Transcript Highlights */}
+              {assessment.highlights && assessment.highlights.length > 0 && (
+                <div className="callout">
+                  <h3>From Your Actual Transcript</h3>
+                  {assessment.highlights.map((h, idx) => (
+                    <div key={idx} style={{ marginBottom: '12px' }}>
+                      <div className="quote">“{h.quote}”</div>
+                      <p>
+                        <strong>Observation:</strong> {h.issue}
+                      </p>
+                      <p>
+                        <strong>Recommendation:</strong> {h.suggestion}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Technique Recommendation */}
+              <h2>Recommended Technique: {assessment.technique.name}</h2>
+              <div className="callout">
+                {assessment.technique.steps.map((st, i) => (
+                  <p key={i} style={{ fontWeight: 600, margin: '4px 0' }}>
+                    {st}
+                  </p>
+                ))}
+                <div className="quote" style={{ marginTop: '12px' }}>
+                  <strong>Illustrative Example:</strong>
+                  <br />
+                  {assessment.technique.example}
+                </div>
+              </div>
+
+              {/* Personalized Practice Schedule Builder */}
+              <h2>Your Practice Cadence</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', margin: '14px 0' }}>
+                <div>
+                  <label className="field" htmlFor="durationSelect">
+                    Session Duration
+                  </label>
+                  <select
+                    id="durationSelect"
+                    value={planMinutes}
+                    onChange={e => setPlanMinutes(Number(e.target.value))}
+                  >
+                    <option value={3}>3 minutes (quick micro-drill)</option>
+                    <option value={5}>5 minutes (recommended)</option>
+                    <option value={10}>10 minutes (deep rehearsal)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="field" htmlFor="freqSelect">
+                    Sessions This Week
+                  </label>
+                  <select
+                    id="freqSelect"
+                    value={planFrequency}
+                    onChange={e => setPlanFrequency(Number(e.target.value))}
+                  >
+                    <option value={1}>1 session</option>
+                    <option value={2}>2 sessions</option>
+                    <option value={3}>3 sessions (recommended)</option>
+                    <option value={5}>5 sessions</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="plan">
+                {Array.from({ length: planFrequency }).map((_, i) => (
+                  <div key={i} className="day">
+                    <span className="tag">Practice {i + 1}</span>
+                    <strong>{i === 0 ? assessment.focus : i === 1 ? 'Apply technique' : 'Fluency & brevity'}</strong>
+                    <div>
+                      {i === 0
+                        ? `Focus directly on ${assessment.focus} using ${assessment.technique.name}.`
+                        : i === 1
+                        ? 'Practice with follow-up pressure questions.'
+                        : 'Rehearse with real stakeholders.'}
+                    </div>
+                    <div className="tiny" style={{ marginTop: '8px' }}>
+                      {planMinutes} minutes
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="actions">
+                <button className="btn" onClick={() => setStep(3)}>
+                  Practice this now →
+                </button>
+                <button className="btn ghost" onClick={() => setStep(1)}>
+                  ← Re-record Baseline
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* SCREEN 04: PRACTICE WITH VIRA */}
+          {step === 3 && assessment && (
+            <section>
+              <span className="eyebrow">04 / PRACTICE WITH VIRA</span>
+              <h1>One small change. A clearer message.</h1>
+              <p>Apply the technique you just learned. Rehearse your answer with focus and intention.</p>
+
+              <div className="callout" style={{ borderLeft: '4px solid #7153de' }}>
+                <h3>Active Technique: {assessment.technique.name}</h3>
+                <p>
+                  <strong>Goal:</strong> {assessment.exercise}
+                </p>
+              </div>
+
+              {/* Retry Speech / Text Input */}
+              <div className="speech">
+                <div className="tiny" style={{ textAlign: 'center', fontWeight: 700, color: '#6545e8' }}>
+                  {isRecording2 ? 'Listening… speak your retry clearly' : 'Tap mic to speak, or type your retry'}
+                </div>
+                <div className="record">
+                  <button
+                    type="button"
+                    className={`mic ${isRecording2 ? 'recording' : ''}`}
+                    onClick={() => toggleSpeech(2)}
+                    title="Tap to speak retry"
+                  >
+                    🎙️
+                  </button>
+                  {isRecording2 && <span className="counter">{recTimer2}</span>}
+                </div>
+
+                <label className="field" htmlFor="answer2">
+                  Your guided retry response
+                </label>
+                <textarea
+                  id="answer2"
+                  placeholder="Apply your technique and share your second attempt here..."
+                  value={answer2}
+                  onChange={e => setAnswer2(e.target.value)}
+                />
+                <div className="small" style={{ marginTop: '6px' }}>
+                  {answer2.length} characters (min 35)
+                </div>
+              </div>
+
+              <div className="actions">
+                <button
+                  className="btn"
+                  disabled={comparing || answer2.trim().length < 35}
+                  onClick={handleCompare}
+                >
+                  {comparing ? (
+                    <>
+                      <span className="spinner" /> Analyzing improvement...
+                    </>
+                  ) : (
+                    'Compare my answers →'
+                  )}
+                </button>
+                <button className="btn ghost" onClick={() => setStep(2)}>
+                  ← Review Technique
+                </button>
+              </div>
+
+              {/* Comparison Results Card */}
+              {comparison && (
+                <div style={{ marginTop: '34px', borderTop: '2px dashed #ece6f8', paddingTop: '24px' }}>
+                  <span className="eyebrow">PRACTICE RESULTS</span>
+                  <h2>
+                    {comparison.verdict === 'improved'
+                      ? '🎉 Noticeable Articulation Improvement'
+                      : comparison.verdict === 'similar'
+                      ? 'Solid Attempt — Keep Calibrating'
+                      : 'Good Repetition — Keep Practicing'}
+                  </h2>
+
+                  <div className="stats">
+                    <div className="stat">
+                      <span>Baseline ({assessment.focus})</span>
+                      <b>{comparison.focusBefore}/5</b>
+                    </div>
+                    <div className="stat">
+                      <span>Retry ({assessment.focus})</span>
+                      <b>{comparison.focusAfter}/5</b>
+                    </div>
+                  </div>
+
+                  {/* Meaning Preserved Check */}
+                  <div
+                    className="callout"
+                    style={{
+                      background: comparison.meaningPreserved ? '#eefaf5' : '#fff7ed',
+                      borderColor: comparison.meaningPreserved ? '#c3edd8' : '#fcd6aa',
+                    }}
+                  >
+                    <h3>
+                      {comparison.meaningPreserved ? '✅ Core Meaning Preserved' : '⚠️ Meaning Shift Detected'}
+                    </h3>
+                    <p>{comparison.meaningNote}</p>
+                  </div>
+
+                  <div className="callout">
+                    <h3>What Improved</h3>
+                    <p>{comparison.whatImproved}</p>
+                  </div>
+
+                  <div className="callout">
+                    <h3>Still Needs Work</h3>
+                    <p>{comparison.stillNeedsWork}</p>
+                  </div>
+
+                  {/* Side by side preview */}
+                  <div className="callout">
+                    <h3>Before vs After Comparison</h3>
+                    <div className="quote">
+                      <strong>Baseline:</strong> “{answer1.slice(0, 120)}...”
+                    </div>
+                    <div className="quote" style={{ borderLeftColor: '#1f9e76' }}>
+                      <strong>Retry:</strong> “{answer2.slice(0, 120)}...”
+                    </div>
+                  </div>
+
+                  <div className="actions">
+                    <button className="btn" onClick={handleCopySummary}>
+                      📋 Copy session summary
+                    </button>
+                    <button className="btn secondary" onClick={handleNextScenario}>
+                      Next PM Scenario →
+                    </button>
+                    <button className="btn ghost" onClick={handleStartOver}>
+                      Start fresh
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Footer Disclaimer & Links */}
+          <div className="footer">
+            <span>Scores are practice signals, not a validated assessment. All transcripts are sent securely.</span>
+            <button className="reset" onClick={handleStartOver}>
+              Start over
+            </button>
+          </div>
+        </div>
+      </main>
+
+      {/* Auth Modal (Email OTP, Mobile OTP, Guest Login) */}
+      {showAuthModal && (
+        <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2 style={{ marginBottom: '6px' }}>Sign in to MyCommPal</h2>
+            <p style={{ marginBottom: '16px' }}>
+              Persist your practice sessions, track articulation growth, and access your mentor feedback anytime.
+            </p>
+
+            {/* Auth Mode Tabs */}
+            <div className="auth-tabs">
+              <button
+                type="button"
+                className={`auth-tab ${authTab === 'guest' ? 'active' : ''}`}
+                onClick={() => {
+                  setAuthTab('guest');
+                  setOtpSent(false);
+                  setAuthError(null);
+                }}
+              >
+                👤 Guest
+              </button>
+              <button
+                type="button"
+                className={`auth-tab ${authTab === 'email' ? 'active' : ''}`}
+                onClick={() => {
+                  setAuthTab('email');
+                  setOtpSent(false);
+                  setAuthError(null);
+                }}
+              >
+                ✉️ Email OTP
+              </button>
+              <button
+                type="button"
+                className={`auth-tab ${authTab === 'phone' ? 'active' : ''}`}
+                onClick={() => {
+                  setAuthTab('phone');
+                  setOtpSent(false);
+                  setAuthError(null);
+                }}
+              >
+                📱 Mobile OTP
+              </button>
+            </div>
+
+            {authError && (
+              <div
+                style={{
+                  background: '#ffeef2',
+                  border: '1px solid #ffccd7',
+                  color: '#cf1746',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  marginBottom: '14px',
+                }}
+              >
+                {authError}
+              </div>
+            )}
+
+            {/* GUEST LOGIN */}
+            {authTab === 'guest' && (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <p>Continue immediately without passwords or verification codes. Your practice data persists in Supabase.</p>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ width: '100%', marginTop: '12px' }}
+                  onClick={loginAsGuest}
+                >
+                  Continue as Guest →
+                </button>
+              </div>
+            )}
+
+            {/* EMAIL OR MOBILE OTP */}
+            {(authTab === 'email' || authTab === 'phone') && (
+              <div>
+                {!otpSent ? (
+                  <form onSubmit={handleSendOtp}>
+                    <label className="field" htmlFor="authInput">
+                      {authTab === 'email' ? 'Work or personal email' : 'Mobile phone number with country code'}
+                    </label>
+                    <input
+                      id="authInput"
+                      className="input"
+                      type={authTab === 'email' ? 'email' : 'tel'}
+                      placeholder={authTab === 'email' ? 'alex@company.com' : '+1 555-0199'}
+                      value={authIdentifier}
+                      onChange={e => setAuthIdentifier(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="btn"
+                      style={{ width: '100%', marginTop: '16px' }}
+                      disabled={otpSending}
+                    >
+                      {otpSending ? 'Sending verification code...' : 'Send Verification Code'}
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyOtp}>
+                    <label className="field" htmlFor="otpInput">
+                      Enter 6-digit verification code sent to {authIdentifier}
+                    </label>
+                    <input
+                      id="otpInput"
+                      className="input"
+                      type="text"
+                      maxLength={6}
+                      placeholder="123456"
+                      value={otpCode}
+                      onChange={e => setOtpCode(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                    {otpDevHint && (
+                      <div className="tiny" style={{ color: '#6545e8', marginTop: '6px', fontWeight: 600 }}>
+                        {otpDevHint} (Auto-filled for testing convenience)
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      className="btn"
+                      style={{ width: '100%', marginTop: '16px' }}
+                      disabled={otpVerifying}
+                    >
+                      {otpVerifying ? 'Verifying...' : 'Verify & Continue'}
+                    </button>
+                    <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                      <button
+                        type="button"
+                        className="reset"
+                        onClick={() => setOtpSent(false)}
+                      >
+                        ← Change {authTab === 'email' ? 'email' : 'phone number'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && (
+        <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}>
+          <div className="modal" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h2>Your Practice History</h2>
+              <button
+                type="button"
+                className="btn ghost"
+                style={{ padding: '4px 10px', fontSize: '13px' }}
+                onClick={() => setShowHistoryModal(false)}
+              >
+                ✕ Close
+              </button>
+            </div>
+            <p style={{ marginBottom: '18px' }}>
+              Past sessions persisted in Supabase database for <strong>{user?.identifier}</strong>.
+            </p>
+
+            {historyLoading ? (
+              <div style={{ textAlign: 'center', padding: '30px' }}>
+                <span className="spinner" style={{ borderTopColor: '#7153de' }} />
+                <div className="tiny" style={{ marginTop: '10px' }}>Loading saved sessions...</div>
+              </div>
+            ) : historySessions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
+                No completed practice sessions saved yet. Complete a practice retry to view your history here!
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '55vh', overflowY: 'auto' }}>
+                {historySessions.map(s => (
+                  <div key={s.id} className="callout" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong>{s.goal}</strong>
+                      <span className="tiny">{new Date(s.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <p style={{ fontSize: '13px', margin: '4px 0', color: '#554e66' }}>
+                      <strong>Audience:</strong> {s.audience} · <strong>Focus:</strong> {s.focusSkill}
+                    </p>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '13px' }}>
+                      <span>
+                        Baseline: <b>{s.baselineScores[s.focusSkill as keyof Scores] || 2}/5</b>
+                      </span>
+                      <span>
+                        Retry: <b>{s.retryScores?.[s.focusSkill as keyof Scores] || 'N/A'}/5</b>
+                      </span>
+                      {s.comparison?.verdict && (
+                        <span className={`badge ${s.comparison.verdict === 'improved' ? 'improved' : 'similar'}`}>
+                          {s.comparison.verdict}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
