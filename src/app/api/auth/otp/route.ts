@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveOtp, verifyOtp, getOrCreateProfile } from '@/lib/supabase';
+import { saveOtp, verifyOtp, getOrCreateProfile, cleanIdentifier, createOtpChallenge } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,20 +9,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Valid email or phone number is required.' }, { status: 400 });
     }
 
-    const cleanId = identifier.trim().toLowerCase();
+    const cleanId = cleanIdentifier(identifier, type);
     
     // Generate 6-digit OTP
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     await saveOtp(cleanId, code, 300); // 5 minutes validity
 
-    // In a production setup with Twilio or SendGrid/Resend, you'd send SMS or Email here.
-    // For seamless testing, we return the test code in dev/demo mode:
-    return NextResponse.json({
+    // Create stateless HMAC challenge cookie
+    const challenge = createOtpChallenge(cleanId, code, 300);
+
+    const response = NextResponse.json({
       success: true,
       message: `Verification code sent to ${identifier}`,
-      // Helpful test code for immediate verification during evaluation:
+      // Helpful test code for immediate verification during testing:
       devCode: code,
     });
+
+    response.cookies.set('mycommpal_otp_challenge', challenge, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 300, // 5 minutes
+    });
+
+    return response;
   } catch (error: any) {
     console.error('OTP send error:', error);
     return NextResponse.json({ error: error.message || 'Failed to send OTP' }, { status: 500 });
@@ -37,10 +48,11 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Identifier and OTP code are required.' }, { status: 400 });
     }
 
-    const cleanId = identifier.trim().toLowerCase();
+    const cleanId = cleanIdentifier(identifier, type);
     const cleanCode = code.trim();
+    const challengeCookie = req.cookies.get('mycommpal_otp_challenge')?.value;
 
-    const isValid = await verifyOtp(cleanId, cleanCode);
+    const isValid = await verifyOtp(cleanId, cleanCode, challengeCookie);
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid or expired verification code. Try again.' }, { status: 400 });
     }
@@ -52,6 +64,9 @@ export async function PUT(req: NextRequest) {
       success: true,
       user: profile,
     });
+
+    // Clear challenge cookie
+    response.cookies.delete('mycommpal_otp_challenge');
 
     // Set user cookie for server-side persistence
     response.cookies.set('mycommpal_user', JSON.stringify(profile), {

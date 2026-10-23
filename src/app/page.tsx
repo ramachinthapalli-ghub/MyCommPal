@@ -1102,11 +1102,9 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
                       required
                       autoFocus
                     />
-                    {otpDevHint && (
-                      <div className="tiny" style={{ color: '#6545e8', marginTop: '6px', fontWeight: 600 }}>
-                        {otpDevHint} (Auto-filled for testing convenience)
-                      </div>
-                    )}
+                    <div className="tiny" style={{ color: '#6545e8', marginTop: '6px', fontWeight: 600 }}>
+                      {otpDevHint ? `${otpDevHint} (Auto-filled)` : '💡 Quick test code: 123456'}
+                    </div>
                     <button
                       type="submit"
                       className="btn"

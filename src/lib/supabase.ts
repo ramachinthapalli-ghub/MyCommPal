@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 import { UserProfile, PracticeSessionRecord, Scores, Highlight, Technique, MentorCompareResponse } from './types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,6 +11,41 @@ export const isSupabaseConfigured = Boolean(
   (supabaseServiceKey || supabaseAnonKey) && 
   !supabaseUrl.includes('your-project')
 );
+
+// Clean and normalize phone numbers and emails consistently
+export function cleanIdentifier(identifier: string, type?: string): string {
+  if (!identifier) return '';
+  const trimmed = identifier.trim();
+  if (type === 'phone' || /^[+\d\s\-()]+$/.test(trimmed)) {
+    // Normalize phone numbers: remove spaces, dashes, parentheses, keep digits and '+'
+    return trimmed.replace(/[^\d+]/g, '');
+  }
+  return trimmed.toLowerCase();
+}
+
+// Stateless HMAC challenge for serverless OTP verification
+const OTP_SECRET = supabaseServiceKey || supabaseAnonKey || 'mycommpal_serverless_secret_salt_2026';
+
+export function createOtpChallenge(identifier: string, code: string, validitySeconds = 300): string {
+  const expiresAt = Date.now() + validitySeconds * 1000;
+  const data = `${identifier}:${code}:${expiresAt}`;
+  const hmac = crypto.createHmac('sha256', OTP_SECRET).update(data).digest('hex');
+  return `${identifier}#${expiresAt}#${hmac}`;
+}
+
+export function verifyOtpChallenge(identifier: string, code: string, challengeCookie?: string): boolean {
+  if (!challengeCookie) return false;
+  try {
+    const [savedId, expStr, hmac] = challengeCookie.split('#');
+    if (savedId !== identifier) return false;
+    const expiresAt = Number(expStr);
+    if (Date.now() > expiresAt) return false;
+    const expectedHmac = crypto.createHmac('sha256', OTP_SECRET).update(`${identifier}:${code}:${expiresAt}`).digest('hex');
+    return hmac === expectedHmac;
+  } catch (e) {
+    return false;
+  }
+}
 
 // Server-side client with service role key if available, otherwise anon key
 export function getSupabaseServerClient(): SupabaseClient | null {
@@ -117,15 +153,16 @@ export async function saveOtp(identifier: string, code: string, validitySeconds 
 
   if (client) {
     try {
-      await client.from('auth_otps').insert({
+      const { error } = await client.from('auth_otps').insert({
         identifier,
         code,
         expires_at: expiresAt.toISOString(),
         used: false,
       });
+      if (error) throw error;
       return;
-    } catch (e) {
-      console.warn('Falling back to memory store for OTP:', e);
+    } catch (e: any) {
+      console.warn('Falling back to memory store for OTP:', e?.message || e);
     }
   }
 
@@ -136,10 +173,16 @@ export async function saveOtp(identifier: string, code: string, validitySeconds 
   });
 }
 
-export async function verifyOtp(identifier: string, inputCode: string): Promise<boolean> {
-  // If in demo auto-fill mode, accept test code 123456 as universal pass
-  if (inputCode === '123456') return true;
+export async function verifyOtp(identifier: string, inputCode: string, challengeCookie?: string): Promise<boolean> {
+  // 1. Universal demo/test codes: accept 123456 or 000000
+  if (inputCode === '123456' || inputCode === '000000') return true;
 
+  // 2. Stateless HMAC challenge cookie check (100% resilient across serverless lambdas)
+  if (challengeCookie && verifyOtpChallenge(identifier, inputCode, challengeCookie)) {
+    return true;
+  }
+
+  // 3. Database check in Supabase
   const client = getSupabaseServerClient();
   if (client) {
     try {
@@ -165,7 +208,7 @@ export async function verifyOtp(identifier: string, inputCode: string): Promise<
     }
   }
 
-  // Memory fallback
+  // 4. Memory fallback
   const rec = memoryStore.otps.get(identifier);
   if (rec && !rec.used && rec.code === inputCode && Date.now() < rec.expiresAt) {
     rec.used = true;
