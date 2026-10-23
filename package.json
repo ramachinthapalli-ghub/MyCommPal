@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "eval": "tsc src/lib/rubric.ts src/lib/mentor-engine.ts --outDir ./dist_test --module commonjs --target es2020 --moduleResolution node --esModuleInterop && node scripts/run-eval.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.6",

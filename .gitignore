@@ -26,3 +26,5 @@ dist/
 .DS_Store
 *.pem
 *.log
+dist_test/
+*.tsbuildinfo
