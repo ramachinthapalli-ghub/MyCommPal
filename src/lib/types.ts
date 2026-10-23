@@ -17,6 +17,8 @@ export type GoalType =
   | 'Persuasion'
   | string;
 
+export type AttemptType = 'baseline' | 'practice_1' | 'practice_2';
+
 // Layer A: Core Communication Skills (1-5 scale)
 export interface Scores {
   clarity: number;
@@ -90,6 +92,58 @@ export interface EvidenceCoaching {
   };
 }
 
+// Structured AI Response conforming to Section 8
+export interface StructuredAIResponse {
+  attempt_id?: string;
+  goal: string;
+  scenario_alignment: {
+    score: number;
+    rationale: string;
+    required_elements?: Array<{ element: string; addressed: boolean; evidence?: string }>;
+  };
+  scores: {
+    clarity: number;
+    structure: number;
+    conciseness: number;
+    goal_effectiveness?: number;
+  };
+  score_explanations: {
+    clarity: string;
+    structure: string;
+    conciseness: string;
+    scenario_alignment?: string;
+    goal_effectiveness?: string;
+  };
+  strengths: Array<{
+    quote: string;
+    impact: string;
+  }>;
+  improvement_areas: Array<{
+    quote: string;
+    audience_impact: string;
+    missing_elements?: string[];
+  }>;
+  focus_area: 'clarity' | 'structure' | 'conciseness';
+  coaching_technique: string;
+  coaching_steps: string[];
+  contextual_example: string;
+  next_exercise: {
+    title: string;
+    exercise: string;
+    sentence_starter: string;
+  };
+  // Comparison fields (optional when evaluating single attempt)
+  meaning_preserved?: boolean;
+  dimension_changes?: Record<string, {
+    original_score: number;
+    revised_score: number;
+    change: number;
+    classification: 'improved' | 'similar' | 'declined';
+    explanation: string;
+  }>;
+  overall_insight?: string;
+}
+
 export interface MentorAssessRequest {
   mode: 'assess';
   goal: GoalType;
@@ -97,9 +151,11 @@ export interface MentorAssessRequest {
   scenario: string;
   transcript: string;
   scenarioMode?: 'vira' | 'mine';
+  attemptType?: AttemptType;
 }
 
 export interface MentorAssessResponse {
+  attemptId?: string;
   scores: Scores; // Layer A
   scoreExplanations?: {
     clarity: string;
@@ -117,6 +173,8 @@ export interface MentorAssessResponse {
   technique: Technique;
   exercise: string;
   evidenceCoaching: EvidenceCoaching;
+  provider?: string;
+  model?: string;
 }
 
 export interface DimensionComparison {
@@ -128,6 +186,19 @@ export interface DimensionComparison {
   explanation: string;
   baselineQuote?: string;
   retryQuote?: string;
+  // Support for 3-attempt comparison (Baseline -> Practice 1 -> Practice 2)
+  practice1Score?: number;
+  practice2Score?: number;
+  trend?: 'improved' | 'similar' | 'declined';
+}
+
+export interface MultiAttemptProgressRow {
+  skill: string;
+  baseline: number;
+  practice1?: number;
+  practice2?: number;
+  trend: 'improved' | 'similar' | 'declined';
+  change: number;
 }
 
 export interface MentorCompareRequest {
@@ -137,16 +208,25 @@ export interface MentorCompareRequest {
   scenario: string;
   firstTranscript: string;
   secondTranscript: string;
+  thirdTranscript?: string; // Optional Practice 2 attempt
   focus: 'clarity' | 'structure' | 'conciseness' | string;
   firstScores: Scores;
-  assessment?: MentorAssessResponse;
   firstGoalEffectiveness?: GoalEffectiveness;
   firstScenarioAlignment?: ScenarioAlignment;
+  practice1Scores?: Scores;
+  practice1GoalEffectiveness?: GoalEffectiveness;
+  practice1ScenarioAlignment?: ScenarioAlignment;
+  assessment?: MentorAssessResponse;
+  scenarioMode?: 'vira' | 'mine';
+  practicePlan?: PracticePlan;
+  attemptIndex?: 1 | 2; // 1 for Practice 1, 2 for Practice 2
 }
 
 export interface MentorCompareResponse {
   secondScores: Scores;
   firstScores?: Scores;
+  practice1Scores?: Scores;
+  practice2Scores?: Scores;
   firstGoalEffectiveness?: GoalEffectiveness;
   secondGoalEffectiveness?: GoalEffectiveness;
   firstScenarioAlignment?: ScenarioAlignment;
@@ -158,6 +238,8 @@ export interface MentorCompareResponse {
     goalEffectiveness?: DimensionComparison;
     scenarioAlignment?: DimensionComparison;
   };
+  multiAttemptRows?: MultiAttemptProgressRow[];
+  hasPractice2?: boolean;
   focusBefore: number;
   focusAfter: number;
   focusChange?: number;
@@ -181,6 +263,25 @@ export interface MentorCompareResponse {
     comment?: string;
     submittedAt?: string;
   };
+  provider?: string;
+  model?: string;
+}
+
+export interface CoachNextPracticeRequest {
+  mode: 'next_practice';
+  goal: GoalType;
+  audience: string;
+  scenario: string;
+  focus: string;
+  weaknessSummary?: string;
+  lastTranscript?: string;
+}
+
+export interface CoachNextPracticeResponse {
+  title: string;
+  exercise: string;
+  sentenceStarter: string;
+  technique: Technique;
 }
 
 export interface PracticeSessionRecord {

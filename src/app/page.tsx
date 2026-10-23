@@ -5,6 +5,8 @@ import {
   UserProfile,
   GoalType,
   Scores,
+  GoalEffectiveness,
+  ScenarioAlignment,
   Highlight,
   Technique,
   PracticePlan,
@@ -81,6 +83,14 @@ export default function MyCommPalApp() {
   // Comparison State
   const [comparing, setComparing] = useState(false);
   const [comparison, setComparison] = useState<MentorCompareResponse | null>(null);
+
+  // Multi-Attempt Practice State (Baseline -> Practice 1 -> Practice 2)
+  const [practiceAttempt, setPracticeAttempt] = useState<1 | 2>(1);
+  const [practice1Answer, setPractice1Answer] = useState('');
+  const [practice1Scores, setPractice1Scores] = useState<Scores | null>(null);
+  const [practice1GoalEff, setPractice1GoalEff] = useState<GoalEffectiveness | null>(null);
+  const [practice1ScnAlign, setPractice1ScnAlign] = useState<ScenarioAlignment | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Quick User Feedback state
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
@@ -316,6 +326,7 @@ export default function MyCommPalApp() {
   // Assessment Step Handlers
   async function handleAssess() {
     stopSpeech();
+    setApiError(null);
     if (scenarioMode === 'mine' && customSituation.trim().length < 15) {
       alert('Please describe your upcoming situation in a little more detail (at least 15 characters).');
       return;
@@ -328,7 +339,7 @@ export default function MyCommPalApp() {
 
     try {
       setAssessing(true);
-      const res = await fetch('/api/mentor', {
+      const res = await fetch('/api/coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -338,6 +349,7 @@ export default function MyCommPalApp() {
           scenario: currentScenarioText,
           transcript: answer1.trim(),
           scenarioMode,
+          attemptType: 'baseline',
         }),
       });
 
@@ -348,6 +360,7 @@ export default function MyCommPalApp() {
       setStep(2);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e: any) {
+      setApiError(e.message || 'Something went wrong. Please retry.');
       alert(e.message || 'Something went wrong. Please retry.');
     } finally {
       setAssessing(false);
@@ -357,6 +370,7 @@ export default function MyCommPalApp() {
   // Comparison Step Handlers
   async function handleCompare() {
     stopSpeech();
+    setApiError(null);
     if (answer2.trim().length < 35) {
       alert('Please complete your retry attempt (at least 35 characters) before comparing.');
       return;
@@ -366,30 +380,51 @@ export default function MyCommPalApp() {
 
     try {
       setComparing(true);
-      const res = await fetch('/api/mentor', {
+      const requestPayload: any = {
+        mode: 'compare',
+        goal,
+        audience,
+        scenario: currentScenarioText,
+        firstTranscript: answer1.trim(),
+        focus: assessment.focus,
+        firstScores: assessment.scores,
+        firstGoalEffectiveness: assessment.goalEffectiveness,
+        firstScenarioAlignment: assessment.scenarioAlignment,
+        practicePlan: { minutes: planMinutes, frequency: planFrequency },
+        assessment,
+        scenarioMode,
+        attemptIndex: practiceAttempt,
+      };
+
+      if (practiceAttempt === 1) {
+        requestPayload.secondTranscript = answer2.trim();
+      } else {
+        requestPayload.secondTranscript = practice1Answer.trim() || answer2.trim();
+        requestPayload.thirdTranscript = answer2.trim();
+        requestPayload.practice1Scores = practice1Scores || assessment.scores;
+        requestPayload.practice1GoalEffectiveness = practice1GoalEff;
+        requestPayload.practice1ScenarioAlignment = practice1ScnAlign;
+      }
+
+      const res = await fetch('/api/coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'compare',
-          goal,
-          audience,
-          scenario: currentScenarioText,
-          firstTranscript: answer1.trim(),
-          secondTranscript: answer2.trim(),
-          focus: assessment.focus,
-          firstScores: assessment.scores,
-          practicePlan: { minutes: planMinutes, frequency: planFrequency },
-          assessment,
-          scenarioMode,
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to compare responses');
 
+      if (practiceAttempt === 1 && data.secondScores) {
+        setPractice1Scores(data.secondScores);
+        setPractice1GoalEff(data.secondGoalEffectiveness || null);
+        setPractice1ScnAlign(data.secondScenarioAlignment || null);
+      }
+
       setComparison(data);
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     } catch (e: any) {
+      setApiError(e.message || 'Comparison failed. Please retry.');
       alert(e.message || 'Comparison failed. Please retry.');
     } finally {
       setComparing(false);
@@ -398,6 +433,12 @@ export default function MyCommPalApp() {
 
   function handlePracticeAgain() {
     stopSpeech();
+    setApiError(null);
+    // If completing Practice 1, preserve answer as Practice 1 and advance to Practice 2
+    if (answer2.trim().length >= 35) {
+      setPractice1Answer(answer2.trim());
+      setPracticeAttempt(2);
+    }
     setAnswer2('');
     setComparison(null);
     setFeedbackSubmitted(false);
@@ -943,7 +984,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 >
                   {assessing ? (
                     <>
-                      <span className="spinner" /> Evaluating response...
+                      <span className="spinner" /> Vira is reviewing your response...
                     </>
                   ) : (
                     "Get Vira's feedback →"
@@ -952,6 +993,17 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 <button className="btn ghost" onClick={() => setStep(0)}>
                   ← Back to Goal
                 </button>
+              </div>
+
+              {apiError && (
+                <div className="callout" style={{ background: '#fef2f2', borderColor: '#fca5a5', color: '#991b1b', marginTop: '14px' }}>
+                  ⚠️ {apiError}
+                </div>
+              )}
+
+              <div style={{ fontSize: '11px', color: '#8d85a0', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🔒</span>
+                <span>Vira evaluates your practice responses securely using server-side AI for personalized PM coaching.</span>
               </div>
             </section>
           )}
@@ -1338,15 +1390,22 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   {isRecording2 && <span className="counter">{recTimer2}</span>}
                 </div>
 
-                <label className="field" htmlFor="answer2">
-                  Your guided retry response
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label className="field" htmlFor="answer2" style={{ margin: 0 }}>
+                    {practiceAttempt === 2 ? 'Practice 2 Rehearsal' : 'Practice 1 Rehearsal'}
+                  </label>
+                  <span className="tag" style={{ background: '#eee8ff', fontSize: '11px', fontWeight: 700, color: '#5534c7' }}>
+                    {practiceAttempt === 2 ? 'Attempt 2 of 2' : 'Attempt 1 of 2'}
+                  </span>
+                </div>
                 <div className="small" style={{ color: '#7a718c', marginBottom: '8px' }}>
-                  💡 Deliver your genuine spoken or typed response applying the model above.
+                  {practiceAttempt === 2
+                    ? '💡 Rehearse once more to address remaining gaps or bring back key narrative elements.'
+                    : '💡 Deliver your genuine spoken or typed response applying the model above.'}
                 </div>
                 <textarea
                   id="answer2"
-                  placeholder="Apply your technique and share your second attempt here..."
+                  placeholder={practiceAttempt === 2 ? "Apply Vira's feedback and deliver your final rehearsal..." : "Apply your technique and share your second attempt here..."}
                   value={answer2}
                   onChange={e => setAnswer2(e.target.value)}
                 />
@@ -1363,8 +1422,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 >
                   {comparing ? (
                     <>
-                      <span className="spinner" /> Analyzing improvement...
+                      <span className="spinner" /> Vira is analyzing your progress...
                     </>
+                  ) : practiceAttempt === 2 ? (
+                    'Compare Practice 2 answers →'
                   ) : (
                     'Compare my answers →'
                   )}
@@ -1374,80 +1435,90 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 </button>
               </div>
 
+              {apiError && (
+                <div className="callout" style={{ background: '#fef2f2', borderColor: '#fca5a5', color: '#991b1b', marginTop: '14px' }}>
+                  ⚠️ {apiError}
+                </div>
+              )}
+
               {/* Comparison Results Card */}
               {comparison && (
                 <div style={{ marginTop: '34px', borderTop: '2px dashed #ece6f8', paddingTop: '24px' }}>
                   <span className="eyebrow">PRACTICE RESULTS</span>
                   <h2 style={{ marginBottom: '14px' }}>Your Progress With Vira</h2>
 
-                  {/* Multidimensional Progress Summary Table (Requirement 2) */}
-                  {comparison.dimensions ? (
-                    <div style={{ margin: '14px 0 20px', overflowX: 'auto', background: '#ffffff', border: '1px solid #ebe6f5', borderRadius: '16px', padding: '6px 12px' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13.5px' }} aria-label="Progress comparison between baseline and retry attempts">
-                        <thead>
-                          <tr style={{ borderBottom: '1.5px solid #ede7fb', color: '#68607c' }}>
-                            <th style={{ padding: '12px 10px', fontWeight: 700 }}>Skill</th>
-                            <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Baseline</th>
-                            <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Retry</th>
-                            <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'right' }}>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.values(comparison.dimensions).map((dim, idx) => {
-                            const isImproved = dim.classification === 'improved';
-                            const isDeclined = dim.classification === 'declined';
-                            const dimTitle =
-                              dim.dimension === 'goalEffectiveness'
-                                ? `${goal} Quality`
-                                : dim.dimension === 'scenarioAlignment'
-                                ? 'Scenario Alignment'
-                                : dim.dimension.charAt(0).toUpperCase() + dim.dimension.slice(1);
+                  {/* Multidimensional Progress Summary Table (Supporting Baseline -> Practice 1 -> Practice 2) */}
+                  <div style={{ margin: '14px 0 20px', overflowX: 'auto', background: '#ffffff', border: '1px solid #ebe6f5', borderRadius: '16px', padding: '6px 12px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13.5px' }} aria-label="Progress comparison between baseline and practice attempts">
+                      <thead>
+                        <tr style={{ borderBottom: '1.5px solid #ede7fb', color: '#68607c' }}>
+                          <th style={{ padding: '12px 10px', fontWeight: 700 }}>Skill</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Baseline</th>
+                          <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Practice 1</th>
+                          {comparison.hasPractice2 && (
+                            <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Practice 2</th>
+                          )}
+                          <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'right' }}>Trend</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(comparison.multiAttemptRows && comparison.multiAttemptRows.length > 0
+                          ? comparison.multiAttemptRows
+                          : Object.values(comparison.dimensions || {}).map(d => ({
+                              skill:
+                                d.dimension === 'goalEffectiveness'
+                                  ? `${goal} Quality`
+                                  : d.dimension === 'scenarioAlignment'
+                                  ? 'Scenario Alignment'
+                                  : d.dimension.charAt(0).toUpperCase() + d.dimension.slice(1),
+                              baseline: d.originalScore,
+                              practice1: d.revisedScore,
+                              practice2: undefined,
+                              trend: d.classification,
+                              change: d.change,
+                            }))
+                        ).map((row, idx, arr) => {
+                          const isImproved = row.trend === 'improved';
+                          const isDeclined = row.trend === 'declined';
 
-                            return (
-                              <tr key={idx} style={{ borderBottom: idx === Object.values(comparison.dimensions || {}).length - 1 ? 'none' : '1px solid #f2edf9' }}>
-                                <td style={{ padding: '12px 10px', fontWeight: 600, color: '#2d254b' }}>
-                                  {dimTitle}
-                                </td>
-                                <td style={{ padding: '12px 10px', textAlign: 'center', color: '#7a718c', fontWeight: 600 }}>
-                                  {dim.originalScore}/5
-                                </td>
+                          return (
+                            <tr key={idx} style={{ borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #f2edf9' }}>
+                              <td style={{ padding: '12px 10px', fontWeight: 600, color: '#2d254b' }}>
+                                {row.skill}
+                              </td>
+                              <td style={{ padding: '12px 10px', textAlign: 'center', color: '#7a718c', fontWeight: 600 }}>
+                                {row.baseline}/5
+                              </td>
+                              <td style={{ padding: '12px 10px', textAlign: 'center', color: !comparison.hasPractice2 ? (isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#3f385c') : '#7a718c', fontWeight: 600 }}>
+                                {row.practice1 !== undefined ? `${row.practice1}/5` : '—'}
+                              </td>
+                              {comparison.hasPractice2 && (
                                 <td style={{ padding: '12px 10px', textAlign: 'center', color: isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#3f385c', fontWeight: 700 }}>
-                                  {dim.revisedScore}/5
+                                  {row.practice2 !== undefined ? `${row.practice2}/5` : '—'}
                                 </td>
-                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>
-                                  <span
-                                    className="tag"
-                                    style={{
-                                      fontSize: '11px',
-                                      padding: '4px 10px',
-                                      borderRadius: '8px',
-                                      background: isImproved ? '#eaf8f2' : isDeclined ? '#fee2e2' : '#f1f0f5',
-                                      color: isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#524b68',
-                                      fontWeight: 700,
-                                      display: 'inline-block',
-                                    }}
-                                  >
-                                    {isImproved ? `+${dim.change} Improved` : isDeclined ? `${dim.change} Declined` : 'Similar'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="stats" style={{ margin: '14px 0' }}>
-                      <div className="stat">
-                        <span>Baseline ({assessment.focus})</span>
-                        <b>{comparison.focusBefore}/5</b>
-                      </div>
-                      <div className="stat">
-                        <span>Retry ({assessment.focus})</span>
-                        <b>{comparison.focusAfter}/5</b>
-                      </div>
-                    </div>
-                  )}
+                              )}
+                              <td style={{ padding: '12px 10px', textAlign: 'right' }}>
+                                <span
+                                  className="tag"
+                                  style={{
+                                    fontSize: '11px',
+                                    padding: '4px 10px',
+                                    borderRadius: '8px',
+                                    background: isImproved ? '#eaf8f2' : isDeclined ? '#fee2e2' : '#f1f0f5',
+                                    color: isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#524b68',
+                                    fontWeight: 700,
+                                    display: 'inline-block',
+                                  }}
+                                >
+                                  {isImproved ? `+${row.change > 0 ? row.change : 1} Improved` : isDeclined ? `${row.change < 0 ? row.change : -1} Declined` : 'Similar'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
 
                   {/* Vira's Progress Insight (Requirement 3: Most Prominent Part of Results) */}
                   <div
@@ -1567,13 +1638,24 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
 
                   {/* Side by side transcript comparison */}
                   <div className="callout" style={{ margin: '16px 0', padding: '14px 18px' }}>
-                    <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>Before vs After Comparison</h3>
+                    <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>Attempt Progression Comparison</h3>
                     <div className="quote" style={{ marginBottom: '8px', fontSize: '13px' }}>
                       <strong>Baseline:</strong> “{answer1.slice(0, 140)}...”
                     </div>
-                    <div className="quote" style={{ borderLeftColor: '#1f9e76', fontSize: '13px' }}>
-                      <strong>Retry:</strong> “{answer2.slice(0, 140)}...”
-                    </div>
+                    {comparison.hasPractice2 && practice1Answer ? (
+                      <>
+                        <div className="quote" style={{ marginBottom: '8px', borderLeftColor: '#7153de', fontSize: '13px' }}>
+                          <strong>Practice 1:</strong> “{practice1Answer.slice(0, 140)}...”
+                        </div>
+                        <div className="quote" style={{ borderLeftColor: '#1f9e76', fontSize: '13px' }}>
+                          <strong>Practice 2:</strong> “{answer2.slice(0, 140)}...”
+                        </div>
+                      </>
+                    ) : (
+                      <div className="quote" style={{ borderLeftColor: '#1f9e76', fontSize: '13px' }}>
+                        <strong>Practice 1:</strong> “{answer2.slice(0, 140)}...”
+                      </div>
+                    )}
                   </div>
 
                   {/* Quick User Feedback on Vira Guidance */}
