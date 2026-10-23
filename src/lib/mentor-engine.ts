@@ -10,69 +10,88 @@ import {
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// System prompt as defined in SPEC.md Section 11, updated for deep situational context
-const VIRA_SYSTEM_PROMPT = `You are Vira, a warm, direct communication mentor for product managers.
-You help PMs structure and articulate their ideas, decisions, stories, and presentations clearly under pressure.
+// System prompt for Vira: World-Class PM Communication Mentor
+const VIRA_SYSTEM_PROMPT = `You are Vira, an elite, warm, and highly calibrated communication mentor for Product Managers.
+Your mission is to help PMs articulate ideas, defend decisions, influence without authority, tell compelling product stories, and deliver punchy executive presentations.
 
-Scoring Rubric (1-5 scale):
-- Clarity: Is the main message understandable? Can the listener identify the intended recommendation or idea?
-- Structure: Are ideas in a logical order, with supporting reasoning?
-- Conciseness: Does the response give the important information without unnecessary detail or repetition?
+Evaluation Rubric (1-5 scale):
+- Clarity: Is the core message/decision unmistakable in the first 20 seconds? Can any listener instantly understand the recommendation or moral?
+- Structure: Does the response follow a deliberate logical progression (e.g., PREP, BLUF, Hook-Journey-Reflection, 3Ps)? Are transitions natural?
+- Conciseness: Does every sentence add value? Is unnecessary preamble, filler ("um", "like", "you know"), or redundant context eliminated?
 
-Scoring anchors:
-- 1 Poor: unclear, disorganized, hard to follow, or just copying the question.
-- 3 Adequate: main idea understandable but could land better.
-- 5 Strong: clear, logically structured, concise, important information retained.
-Scores of 5 should be rare and calibrated; do not inflate.
+Scoring Calibration:
+- 1 Poor: Disorganized, rambles without arriving at a point, or merely echoes the prompt question.
+- 2 Developing: Has good underlying thoughts but buried under heavy preamble, passive language, or missing rationale.
+- 3 Adequate: Main point is understandable, but lacks executive punch, crisp structure, or memorable takeaway.
+- 4 Strong: Well-structured, clear recommendation/story, good supporting evidence, concise delivery.
+- 5 Exceptional: Flawless executive delivery, compelling hook, airtight logic, zero fluff (very rare).
 
-CRITICAL RULES:
-1. ALWAYS maintain deep relevance to the user's specific situation, topic, goal, and audience.
-2. If the user is telling a story (e.g., career journey, aspiring PM talk, product failure), recommend a storytelling framework (e.g. Hook-Journey-Reflection, HCP Arc) and provide an illustrative example explicitly about THEIR topic. NEVER give an irrelevant onboarding vs reporting example if the user is talking about their career journey or another topic!
-3. If the user's response simply copies or repeats the scenario/question without answering, flag it in focusExplanation and guide them to take a stand.
-4. Highlights must cite 1 to 3 verbatim quotes from the user's transcript (under 25 words each).
-5. In compare mode: verify if Attempt 2 is relevant to the topic. If Attempt 2 simply copied the prompt instructions (e.g., "Active Technique: PREP Framework...") or is nonsensical, mark meaningPreserved as false, verdict as "less clear", and DO NOT increase the score.
-6. Return raw JSON ONLY, conforming strictly to the requested schema.`;
+CRITICAL ANALYSIS RULES:
+1. DEEP SITUATIONAL RELEVANCE:
+   - Identify the user's specific context, domain, audience, and scenario (e.g., career talk to aspiring PMs, tough feature delay to leadership, roadmap prioritization, cross-functional alignment).
+   - NEVER provide canned or mismatched examples (e.g., NEVER show an onboarding vs reporting example if the user is talking about their career journey, a technical migration, or a customer story!).
+   - Craft an illustrative example under 45 words that models EXACTLY how to speak about THEIR specific topic.
+
+2. DETECT PROMPT ECHOES / NON-ANSWERS:
+   - If the user simply repeats or copies the prompt question without expressing their own thoughts/decisions, score Clarity as 1, explain that they repeated the prompt, and challenge them to share their own stance.
+
+3. SELECT THE HIGHEST-LEVERAGE FOCUS SKILL:
+   - Focus on the single lowest-scoring dimension (ties resolve: Structure -> Clarity -> Conciseness).
+   - Explain the specific gap with empathy and precision.
+
+4. VERBATIM HIGHLIGHTS WITH ACTIONABLE REWRITES:
+   - Cite 1-3 exact quotes (<25 words) from their actual transcript.
+   - For each quote, explain why it diluted their impact and provide a concrete "Say this instead:" suggestion.
+
+5. ACCURATE COMPARISON IN RETRY MODE:
+   - Compare Attempt 1 and Attempt 2 rigorously.
+   - Detect if Attempt 2 pasted framework headers/instructions (e.g., "Active Technique: PREP Framework...") or went off-topic. If so, mark meaningPreserved=false, verdict="less clear", and DO NOT increase scores.
+   - Only award a score improvement if Attempt 2 applied the technique to their real message and improved clarity/structure without dropping critical facts.`;
 
 export async function runMentorAssess(req: MentorAssessRequest): Promise<MentorAssessResponse> {
   const { goal, audience, scenario, transcript } = req;
 
   if (ANTHROPIC_API_KEY && !ANTHROPIC_API_KEY.includes('your_anthropic')) {
     try {
-      const prompt = `Evaluate this PM's baseline communication response.
+      const prompt = `Analyze this Product Manager's baseline response and deliver calibrated mentorship feedback.
 
-Goal: ${goal}
-Target Audience: ${audience}
-Scenario / Situation: ${scenario}
+Context:
+- Goal: ${goal}
+- Audience: ${audience}
+- Scenario / Situation: ${scenario}
 
 User Transcript:
 "${transcript}"
 
-Requirements:
-1. Evaluate ONLY what is in the transcript.
-2. Check if the user merely copied/echoed the question prompt without answering. If so, focus on clarity, score 1-2, explain: "Your response repeats the prompt. To practice effectively, answer with your specific decision, story, or recommendation."
-3. Select ONE focus skill (lowest scoring: structure, clarity, or conciseness).
-4. The technique and illustrative example MUST be deeply relevant to the user's situation and goal (e.g., if the user is giving a talk on their PM journey to aspiring PMs, use a storytelling structure and craft an illustrative example about a PM journey; if articulating a feature trade-off, use a trade-off framework).
-5. Highlight 1-3 verbatim phrases (<=25 words) from their transcript.
+Instructions:
+1. Examine the user's actual words against their specific situation and audience.
+2. Check if the user merely repeated the question prompt. If so, flag in focusExplanation and give an opening sentence to start answering.
+3. Recommend ONE communication framework best suited to their topic:
+   - Storytelling / Career / Journey -> Hook, Journey, Reflection (HJR Arc) or Situation, Complication, Resolution (SCR)
+   - Presentations / Pitches -> The 3Ps Opening (Purpose, Problem, Payoff) or BLUF Executive Opening
+   - Articulation / Prioritization / Trade-offs -> PREP (Point, Reason, Example, Point) or DRT (Decision, Rationale, Trade-off)
+4. Craft an illustrative example under 45 words that explicitly demonstrates how to speak about THEIR exact topic and situation.
+5. Provide 1-3 verbatim highlights with constructive "Say this instead" suggestions.
 
-Return JSON matching this exact schema:
+Return raw JSON strictly matching:
 {
   "scores": { "clarity": 1-5, "structure": 1-5, "conciseness": 1-5 },
   "strongest": "clarity" | "structure" | "conciseness",
   "focus": "clarity" | "structure" | "conciseness",
-  "focusExplanation": "Why this dimension was chosen as the priority focus based on their actual words and situation",
+  "focusExplanation": "Clear diagnosis of why this dimension is their biggest opportunity for growth in this situation",
   "highlights": [
     {
-      "quote": "verbatim quote <=25 words",
-      "issue": "specific reason this part was weak",
-      "suggestion": "actionable improvement"
+      "quote": "verbatim quote <=25 words from transcript",
+      "issue": "specific reason this part weakened their message",
+      "suggestion": "Say this instead: [crisp alternative phrasing]"
     }
   ],
   "technique": {
-    "name": "Technique name relevant to situation (e.g., Hook-Journey-Reflection for stories, 3Ps for presentations, PREP for decisions)",
-    "steps": ["Step 1", "Step 2", "Step 3"],
-    "example": "Brief illustrative example under 45 words explicitly demonstrating how to speak about THEIR topic"
+    "name": "Specific Framework Name",
+    "steps": ["Step 1: ...", "Step 2: ...", "Step 3: ..."],
+    "example": "High-impact illustrative example under 45 words tailored to their specific topic"
   },
-  "exercise": "Specific guided practice instruction for their next attempt"
+  "exercise": "Actionable drill telling them how to start their next retry attempt"
 }`;
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -85,7 +104,7 @@ Return JSON matching this exact schema:
         body: JSON.stringify({
           model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1500,
-          temperature: 0.2,
+          temperature: 0.1,
           system: VIRA_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -105,7 +124,7 @@ Return JSON matching this exact schema:
         }
       }
     } catch (e) {
-      console.warn('Anthropic call failed, falling back to rubric evaluator:', e);
+      console.warn('Anthropic call failed, falling back to calibrated engine:', e);
     }
   }
 
@@ -118,40 +137,46 @@ export async function runMentorCompare(req: MentorCompareRequest): Promise<Mento
 
   if (ANTHROPIC_API_KEY && !ANTHROPIC_API_KEY.includes('your_anthropic')) {
     try {
-      const prompt = `Compare this PM's retry response against their baseline response.
+      const prompt = `Evaluate whether this PM improved their communication in their guided retry.
 
-Goal: ${goal}
-Target Audience: ${audience}
-Scenario: ${scenario}
-Focus Skill: ${focus}
-Baseline Scores: ${JSON.stringify(firstScores)}
+Context:
+- Goal: ${goal}
+- Audience: ${audience}
+- Scenario: ${scenario}
+- Focus Skill: ${focus}
+- Baseline Scores: ${JSON.stringify(firstScores)}
 
-First Attempt (Baseline):
+Baseline Response (Attempt 1):
 "${firstTranscript}"
 
-Second Attempt (Retry):
+Retry Response (Attempt 2):
 "${secondTranscript}"
 
-CRITICAL RELEVANCE CHECK:
-- Verify whether Attempt 2 is a genuine attempt to communicate about the scenario/topic.
-- If Attempt 2 simply copied the exercise prompt (e.g. "Active Technique: PREP Framework...", "Goal: Explain the exact same decision..."), or entered irrelevant text, you MUST:
-  1. Set meaningPreserved to false.
-  2. Set meaningNote to "The retry attempt pasted the exercise instructions or was off-topic rather than delivering a genuine spoken/typed response."
-  3. Set verdict to "less clear".
-  4. Keep focusAfter equal to or lower than focusBefore. DO NOT award higher scores for prompt copies.
-  5. State in whatImproved that no improvement could be measured.
+Strict Evaluation Rules:
+1. Relevance Verification:
+   - If Attempt 2 merely copied the prompt instructions (e.g. "Active Technique: PREP...", "Goal: Explain..."), or is unrelated/nonsense:
+     * Set meaningPreserved: false
+     * Set meaningNote: "The retry attempt pasted the exercise instructions or was off-topic rather than delivering an authentic response."
+     * Set verdict: "less clear"
+     * Set focusAfter: ${firstScores[focus as keyof Scores] || 2} (DO NOT increase scores!)
+     * Set whatImproved: "No improvement could be measured because the second attempt did not respond to the situation."
+2. Genuine Progress Check:
+   - If Attempt 2 genuinely applied the framework to their situation:
+     * Verify if the message, core facts, and intent were preserved without distortion.
+     * Compare opening sentences, structure, and brevity.
+     * Award an increase in ${focus} only if tangible structural clarity is demonstrated.
 
-Return JSON matching this exact schema:
+Return raw JSON strictly matching:
 {
   "secondScores": { "clarity": 1-5, "structure": 1-5, "conciseness": 1-5 },
   "focusBefore": ${firstScores[focus as keyof Scores] || 2},
   "focusAfter": 1-5,
   "verdict": "improved" | "similar" | "less clear",
   "meaningPreserved": true or false,
-  "meaningNote": "Specific evaluation of message preservation vs distortion or prompt copy",
-  "whatImproved": "Evidence comparing both attempts",
-  "stillNeedsWork": "What they should continue to polish in future practice",
-  "nextStep": "Recommended next action for their practice habit"
+  "meaningNote": "Evaluation of whether core facts and intent were maintained or distorted",
+  "whatImproved": "Precise comparison of what Attempt 2 did better than Attempt 1",
+  "stillNeedsWork": "Specific next refinement for their delivery",
+  "nextStep": "Recommended next action"
 }`;
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -164,7 +189,7 @@ Return JSON matching this exact schema:
         body: JSON.stringify({
           model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1500,
-          temperature: 0.2,
+          temperature: 0.1,
           system: VIRA_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -190,7 +215,7 @@ Return JSON matching this exact schema:
 }
 
 // -------------------------------------------------------------
-// Calibrated Contextual Fallback Engine (Strictly mirrors SPEC.md)
+// Calibrated Contextual Fallback Engine
 // -------------------------------------------------------------
 
 function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
@@ -201,17 +226,17 @@ function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
 
   const scenarioLower = (req.scenario || '').toLowerCase();
   const goal = req.goal || 'Articulation';
+  const audience = req.audience || 'Cross-functional stakeholders';
 
-  // 1. Check for Question Echo (user simply copy-pasted or echoed the prompt)
+  // 1. Detect Prompt Echo / Verbatim Copy
   const isQuestionEcho =
-    (scenarioLower.length > 20 &&
-      (lower.includes("you're a product manager") ||
-        lower.includes('which would you prioritize') ||
-        lower.includes('our team can build either') ||
-        lower.includes('a stakeholder asks why you are delaying') ||
-        lower.includes('tell the story of a product problem'))) ||
+    lower.includes("you're a product manager") ||
+    lower.includes('which would you prioritize') ||
+    lower.includes('our team can build either') ||
+    lower.includes('a stakeholder asks why you are delaying') ||
+    lower.includes('tell the story of a product problem') ||
     lower.startsWith('your real situation:') ||
-    (scenarioLower.length > 30 && lower.includes(scenarioLower.slice(0, 40)));
+    (scenarioLower.length > 25 && lower.includes(scenarioLower.slice(0, 35)));
 
   if (isQuestionEcho) {
     return {
@@ -219,71 +244,70 @@ function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
       strongest: 'conciseness',
       focus: 'clarity',
       focusExplanation:
-        'I noticed your response repeats the prompt rather than delivering your actual point of view. To get value from this practice, take a clear stand and share your reasoning.',
+        'I noticed your response repeated the scenario prompt instead of stating your own perspective. The greatest value comes when you take a firm stance and defend your decision.',
       highlights: [
         {
           quote: t.slice(0, 60),
-          issue: 'This repeats the scenario question rather than providing your answer or decision.',
-          suggestion: 'Start directly with your answer: e.g., "My recommendation is..." or "In my journey as a PM..."',
+          issue: 'This restates the challenge rather than sharing your point of view.',
+          suggestion: 'Say this instead: “My decision is to prioritize [Option X] because [Key Driver] will protect our core customer metric.”',
         },
       ],
       technique: {
         name: 'BLUF (Bottom Line Up Front)',
         steps: [
-          '1. State your direct decision or key takeaway in the first sentence',
-          '2. Provide two clear supporting points',
-          '3. Conclude with the call-to-action or next milestone',
+          '1. Bottom Line: State your choice or takeaway in your very first sentence',
+          '2. Rationale: Give two crisp supporting reasons',
+          '3. Trade-off: Name the trade-off you are accepting and how you will measure success',
         ],
         example:
-          '“My recommendation is that we focus on onboarding first. Our data shows 40% user drop-off before feature discovery, so fixing activation compounds every other metric.”',
+          '“My recommendation is that we fund onboarding first. While reporting is requested, 40% of signups stall on day one. Fixing activation compounds all downstream value.”',
       },
-      exercise: 'Deliver your real answer in one or two sentences. State what you would decide or say to your audience.',
+      exercise: 'Deliver your real decision in sentence one: Start with “My recommendation is...” followed by your single strongest reason.',
     };
   }
 
-  // 2. Detect Context / Theme
-  const isStorytelling =
-    goal === 'Storytelling' ||
-    lower.includes('story') ||
+  // 2. Extract Contextual Domain & Topic
+  const isCareerOrJourney =
     lower.includes('journey') ||
-    lower.includes('aspiring') ||
     lower.includes('career') ||
+    lower.includes('aspiring') ||
+    lower.includes('transition') ||
     lower.includes('talk') ||
     lower.includes('meetup') ||
-    lower.includes('lesson');
+    scenarioLower.includes('journey') ||
+    scenarioLower.includes('story') ||
+    goal === 'Storytelling';
 
   const isPresentation =
     goal === 'Presentations' ||
     lower.includes('presentation') ||
+    lower.includes('pitch') ||
     lower.includes('opening') ||
-    lower.includes('slide') ||
-    lower.includes('propose') ||
-    lower.includes('pitch');
+    lower.includes('proposal') ||
+    scenarioLower.includes('presentation') ||
+    scenarioLower.includes('open a presentation');
 
-  // Structural markers
+  const isDelayOrFriction =
+    scenarioLower.includes('delay') ||
+    scenarioLower.includes('friction') ||
+    lower.includes('delay') ||
+    lower.includes('friction') ||
+    lower.includes('debt');
+
+  // 3. Calibrated Scoring Rubric
   const structureMarkers = [
-    'first',
-    'second',
-    'then',
-    'because',
-    'therefore',
-    'recommend',
-    'trade-off',
-    'prioritize',
-    'turning point',
-    'learned',
-    'result',
-    'impact',
+    'first', 'second', 'because', 'therefore', 'recommend', 'trade-off', 'prioritize',
+    'turning point', 'learned', 'result', 'impact', 'lesson', 'decision', 'step'
   ];
-  const clarityMarkers = ['recommend', 'decision', 'takeaway', 'lesson', 'goal', 'we should', 'bottom line', 'point is'];
-  const concisenessPenalty = wordCount > 180 || lower.includes('um') || lower.includes('like,') || lower.includes('you know');
+  const clarityMarkers = ['recommend', 'decision', 'takeaway', 'point is', 'bottom line', 'we chose', 'goal', 'we must'];
+  const fillerPenalty = wordCount > 180 || lower.includes('um') || lower.includes('like,') || lower.includes('you know');
 
   const structMatches = structureMarkers.filter(m => lower.includes(m)).length;
   const clarityMatches = clarityMarkers.filter(m => lower.includes(m)).length;
 
-  let structure = Math.min(5, Math.max(1, Math.round(1.6 + structMatches * 0.7)));
-  let clarity = Math.min(5, Math.max(1, Math.round(1.6 + clarityMatches * 0.7)));
-  let conciseness = wordCount >= 30 && wordCount <= 120 ? 4 : wordCount < 30 ? 2 : concisenessPenalty ? 2 : 3;
+  let structure = Math.min(5, Math.max(1, Math.round(1.5 + structMatches * 0.7)));
+  let clarity = Math.min(5, Math.max(1, Math.round(1.5 + clarityMatches * 0.75)));
+  let conciseness = wordCount >= 35 && wordCount <= 125 ? 4 : wordCount < 35 ? 2 : fillerPenalty ? 2 : 3;
 
   const scores: Scores = { clarity, structure, conciseness };
   const dimensions: Array<'structure' | 'clarity' | 'conciseness'> = ['structure', 'clarity', 'conciseness'];
@@ -306,81 +330,103 @@ function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
     }
   }
 
-  // Quote verbatim under 25 words
-  const sentences = t.split(/[.?!]+/).map(s => s.trim()).filter(s => s.length > 5);
+  // Verbatim quote extraction
+  const sentences = t.split(/[.?!]+/).map(s => s.trim()).filter(s => s.length > 8);
   const sampleSentence = sentences[0] || t.slice(0, 80);
-  const quoteWords = sampleSentence.split(/\s+/).slice(0, 15).join(' ');
+  const quoteWords = sampleSentence.split(/\s+/).slice(0, 16).join(' ');
+
+  let highlightSuggestion = '';
+  if (focus === 'clarity') {
+    highlightSuggestion = isCareerOrJourney
+      ? 'Say this instead: “The core lesson I want to share today is that PM is about asking better questions, not having all the answers.”'
+      : 'Say this instead: “My direct recommendation is [X], driven by [Key Metric], accepting [Trade-off].”';
+  } else if (focus === 'structure') {
+    highlightSuggestion = isCareerOrJourney
+      ? 'Say this instead: “I started in [Previous Role]. The turning point was [Failure/Insight]. Today, that shapes how I build products.”'
+      : 'Say this instead: “First, the decision: [X]. Second, the reason: [Y]. Third, what we monitor: [Z].”';
+  } else {
+    highlightSuggestion = 'Say this instead: Trim the introductory backstory and deliver your punchline in under 60 seconds.';
+  }
 
   const highlights: Highlight[] = [
     {
       quote: quoteWords || t.slice(0, 60),
       issue:
         focus === 'structure'
-          ? 'The narrative progression needs a tighter bridge between the setup and the key takeaway.'
+          ? 'The transition between your premise and the final conclusion is loose, making it harder for listeners to follow your logic.'
           : focus === 'clarity'
-          ? 'Your central point is woven into the backstory rather than standing out as a memorable headline.'
-          : 'Detailed context took up valuable airtime before getting to the core message.',
-      suggestion:
-        focus === 'structure'
-          ? 'Use an explicit 3-part sequence: Opening hook → Pivotal event → Clear takeaway.'
-          : focus === 'clarity'
-          ? 'Front-load your punchline: state what you learned or what you want the audience to remember upfront.'
-          : 'Trim background setup and deliver the primary message in under 90 seconds.',
+          ? 'Your central point is blended into background context rather than landing as a clear, authoritative headline.'
+          : 'Detailed setup took up valuable airtime before getting to the heart of the message.',
+      suggestion: highlightSuggestion,
     },
   ];
 
-  // 3. Tailor Techniques and Illustrative Examples to the User's Actual Situation!
+  // 4. Fully Contextual Techniques & Situational Examples
   let technique: Technique;
   let focusExplanation = '';
   let exercise = '';
 
-  if (isStorytelling) {
+  if (isCareerOrJourney) {
     technique = {
-      name: 'Hook, Journey, Reflection (HJR Arc)',
+      name: 'Hook, Journey, Reflection (HJR Story Arc)',
       steps: [
-        '1. Hook: Start with your initial assumption or the core struggle (15s)',
-        '2. Journey: Share the unexpected obstacle or turning point (45s)',
-        '3. Reflection: Deliver the actionable takeaway for aspiring PMs (30s)',
+        '1. Hook (15s): Open with your original misconception or beginner struggle',
+        '2. Journey (45s): Share the unexpected hurdle or turning-point project',
+        '3. Reflection (30s): State the single mental model aspiring PMs should adopt',
       ],
       example:
-        '“When I started as a PM, I thought the job was having all the answers. The turning point was launching a feature nobody used—which taught me PM is actually about asking better questions. That shift changed how I build products today.”',
+        '“When I transitioned into PM, I thought the job was having all the answers. The turning point was shipping a feature nobody used—which taught me PM is actually about asking better customer questions. That shift made me ten times more effective.”',
     };
     focusExplanation =
-      'Your story has great authenticity, but listeners need a clear narrative arc so your message lands with lasting inspiration.';
+      'Your story has great authenticity, but structuring it into an explicit Hook → Journey → Reflection arc will make your message unforgettable for aspiring PMs.';
     exercise =
-      'Tell your story in 3 beats: 1) What you believed at first, 2) The turning-point experience, and 3) The single lesson you want aspiring PMs to remember.';
+      'Rehearse your talk in 3 beats: 1) What you believed at first, 2) The turning-point experience, and 3) The single takeaway for your audience.';
   } else if (isPresentation) {
     technique = {
       name: 'The 3Ps Opening (Purpose, Problem, Payoff)',
       steps: [
-        '1. Purpose: Why we are here right now (1 sentence)',
-        '2. Problem: The primary friction or customer opportunity we must tackle',
-        '3. Payoff: The specific outcome or decision we will reach together',
+        '1. Purpose: Why we are gathered today in one clear sentence',
+        '2. Problem: The critical customer or business friction we face right now',
+        '3. Payoff: The concrete alignment or decision we will reach by the end',
       ],
       example:
-        '“Today I am sharing our H2 product focus. Our biggest hurdle is that 35% of users abandon onboarding on day one. By the end of this talk, we will align on the two core bets we are funding to solve it.”',
+        '“Today I am presenting our H2 roadmap strategy. Our biggest friction is that 35% of signups abandon during onboarding. By the end of this session, we will align on funding the self-serve workflow to solve it.”',
     };
     focusExplanation =
-      'Your presentation opening sets the tone for stakeholder attention. Leading with purpose and expected payoff grabs immediate engagement.';
+      'Your opening dictates executive engagement. Using the 3Ps sets a high-authority frame in the first 60 seconds.';
     exercise =
-      'Open your presentation using the 3Ps: State the purpose of your talk, the problem at hand, and what the audience will gain by listening.';
+      'Open your presentation using the 3Ps: State the purpose of the talk, the friction point, and what decision you will make together.';
+  } else if (isDelayOrFriction) {
+    technique = {
+      name: 'DRT Framework (Decision, Rationale, Trade-off)',
+      steps: [
+        '1. Decision: State the timeline change or prioritization directly upfront',
+        '2. Rationale: Anchor with customer data, retention risk, or system health',
+        '3. Trade-off: State the accepted trade-off and the revised delivery date',
+      ],
+      example:
+        '“We are delaying the analytics dashboard by 3 weeks to fix a core login friction. While the dashboard is anticipated, checkout errors are causing immediate churn. Stabilizing access protects ARR, and we resume dashboard rollout next month.”',
+    };
+    focusExplanation =
+      'When explaining delays or friction, stakeholders respect directness. State the decision first, then justify it with customer protection.';
+    exercise =
+      'Explain the situation using DRT: Start with the decision, state the customer rationale, and name the trade-off you are consciously accepting.';
   } else {
-    // Decision / Articulation
     technique = {
       name: 'PREP Framework (Point, Reason, Example, Point)',
       steps: [
-        '1. Point: State your concrete recommendation or position upfront',
+        '1. Point: State your concrete recommendation upfront',
         '2. Reason: Provide the single most compelling driver',
         '3. Example: Anchor with a concrete customer, business, or data signal',
-        '4. Point: Reiterate the decision and immediate next step',
+        '4. Point: Reiterate the decision and expected outcome',
       ],
       example:
-        '“My recommendation is prioritizing the onboarding flow over reporting. Our data shows 42% first-week drop-off, which limits downstream adoption. Fixing activation compounds value for all future users.”',
+        '“My recommendation is prioritizing the onboarding overhaul over reporting. Our data shows 42% first-week drop-off, which caps overall growth. Fixing activation compounds retention for all future users.”',
     };
     focusExplanation =
-      'Your reasoning has substance, but structuring it into a direct Point → Reason → Example sequence will make it unmistakable to executive stakeholders.';
+      'Your reasoning has substance, but organizing it into a disciplined PREP sequence will make it punchy and unmistakable to stakeholders.';
     exercise =
-      'Rehearse your answer with PREP: State your recommendation in sentence one, give your rationale, cite a real observation, and end with the decision.';
+      'Deliver your answer with PREP: Recommendation in sentence one, primary rationale, concrete observation, and reiterate the decision.';
   }
 
   return {
@@ -401,7 +447,7 @@ function fallbackCompare(req: MentorCompareRequest): MentorCompareResponse {
   const words2 = secondTranscript.split(/\s+/).filter(Boolean);
   const wordCount2 = words2.length;
 
-  // 1. Check if user simply copied framework instructions into the retry box!
+  // 1. Check if user pasted framework instructions
   const isInstructionEcho =
     lower2.includes('active technique:') ||
     lower2.includes('goal: explain the exact same decision') ||
@@ -415,7 +461,7 @@ function fallbackCompare(req: MentorCompareRequest): MentorCompareResponse {
     return {
       secondScores: { ...firstScores },
       focusBefore: beforeScore,
-      focusAfter: beforeScore, // NO ARTIFICIAL SCORE INCREASE!
+      focusAfter: beforeScore,
       verdict: 'less clear',
       meaningPreserved: false,
       meaningNote:
@@ -450,9 +496,9 @@ function fallbackCompare(req: MentorCompareRequest): MentorCompareResponse {
 
   // 3. Genuine calibrated comparison
   let improvedCount = 0;
-  if (lower2.includes('recommend') || lower2.includes('propose') || lower2.includes('point') || lower2.includes('journey')) improvedCount++;
-  if (lower2.includes('because') || lower2.includes('reason') || lower2.includes('turning point') || lower2.includes('learned')) improvedCount++;
-  if (lower2.includes('trade-off') || lower2.includes('impact') || lower2.includes('metric') || lower2.includes('takeaway')) improvedCount++;
+  if (lower2.includes('recommend') || lower2.includes('propose') || lower2.includes('point') || lower2.includes('journey') || lower2.includes('decision')) improvedCount++;
+  if (lower2.includes('because') || lower2.includes('reason') || lower2.includes('turning point') || lower2.includes('learned') || lower2.includes('rationale')) improvedCount++;
+  if (lower2.includes('trade-off') || lower2.includes('impact') || lower2.includes('metric') || lower2.includes('takeaway') || lower2.includes('result')) improvedCount++;
 
   const afterScore = Math.min(5, Math.max(1, beforeScore + (improvedCount >= 2 ? 1 : 0)));
   const verdict: 'improved' | 'similar' | 'less clear' =
