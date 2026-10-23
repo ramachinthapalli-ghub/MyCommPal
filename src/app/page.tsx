@@ -16,15 +16,20 @@ import {
 const SCENARIOS: Record<GoalType, string[]> = {
   Articulation: [
     "You're a Product Manager. Your VP asks: ‘Our team can build either an onboarding improvement or a reporting feature this quarter. Which would you prioritize, and why?’ Explain your thinking in about 60 seconds.",
-    "A stakeholder asks why you are delaying a requested feature to address customer-reported friction. Explain your recommendation and its trade-offs.",
+    "In a sprint review, the Head of Sales asks why their top-requested enterprise feature is delayed to fix internal customer onboarding friction. Explain your recommendation, customer impact, and trade-offs.",
+    "Your tech lead insists on spending 4 weeks addressing legacy technical debt, while business stakeholders want a new checkout capability. How do you articulate the priority, risks, and compromise to leadership?",
+    "A major enterprise client threatens to churn unless you commit to a custom one-off roadmap feature by end of week. Articulate your position, strategic reasoning, and trade-offs to your executive team.",
   ],
   Storytelling: [
-    "Tell the story of a product problem you discovered, the decision you made, and the impact it had. Imagine explaining it to other PMs at a meetup.",
-    "Tell the story of a time stakeholder feedback changed your product direction. What was at stake and what did you learn?",
+    "Tell the story of your product management journey and your core product philosophy to aspiring PMs. What was your biggest misconception when starting out, what was your turning-point realization, and what should they remember?",
+    "Tell the story of a product experiment that completely failed. What was your initial assumption, what did actual customer behavior reveal, and how did it change your team's direction?",
+    "Share the story of an unexpected customer discovery insight that convinced a skeptical engineering and design team to rethink a core workflow.",
+    "Tell the story of a high-stakes cross-functional disagreement where you had no direct authority, but successfully influenced the teams to rally around customer value.",
   ],
   Presentations: [
-    "You have 60 seconds to open a presentation proposing a product improvement. What is the customer problem, why now, and what do you want the audience to do?",
-    "Introduce a product experiment to leadership. Explain the customer problem, proposed test, and what success would mean.",
+    "You have 60 seconds to open an executive review proposing a major overhaul to your product's core funnel. State the customer problem, why now, and the exact decision you need from leadership today.",
+    "Introduce a high-risk, high-reward AI experiment to leadership. Explain the user problem, proposed MVP scope, resource ask, and what metrics determine whether to kill or scale it.",
+    "Open a quarterly product roadmap kickoff to cross-functional leads (Sales, Marketing, Eng). Align the room on the two primary business outcomes your team is accountable for delivering this quarter.",
   ],
 };
 
@@ -1052,11 +1057,29 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
               <h1>One small change. A clearer message.</h1>
               <p>Apply the technique you just learned. Rehearse your answer with focus and intention.</p>
 
-              <div className="callout" style={{ borderLeft: '4px solid #7153de' }}>
-                <h3>Active Technique: {assessment.technique.name}</h3>
-                <p>
-                  <strong>Goal:</strong> {assessment.exercise}
-                </p>
+              <div className="callout" style={{ borderLeft: '4px solid #7153de', background: '#f8f6ff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <h3 style={{ margin: 0, color: '#5534c7' }}>🎯 Vira&apos;s Technique Guide: {assessment.technique.name}</h3>
+                  <span className="tag" style={{ background: '#eee8ff' }}>Focus: {assessment.focus.toUpperCase()}</span>
+                </div>
+
+                <div style={{ margin: '10px 0', padding: '10px 14px', background: 'rgba(255,255,255,0.7)', borderRadius: '12px' }}>
+                  <strong style={{ fontSize: '13px', color: '#3f385c' }}>The Structure to Follow:</strong>
+                  <ul style={{ margin: '6px 0 0 18px', fontSize: '13.5px', color: '#554e66', lineHeight: 1.5 }}>
+                    {assessment.technique.steps.map((st, i) => (
+                      <li key={i}>{st}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="quote" style={{ margin: '10px 0', borderLeftColor: '#7153de' }}>
+                  <strong style={{ display: 'block', marginBottom: '4px', color: '#6545e8' }}>💡 Illustrative Model Script:</strong>
+                  {assessment.technique.example}
+                </div>
+
+                <div style={{ marginTop: '12px', padding: '10px 14px', background: '#f1ebff', borderRadius: '12px', fontSize: '13.5px' }}>
+                  <strong style={{ color: '#5534c7' }}>👉 Your Guided Mission:</strong> {assessment.exercise}
+                </div>
               </div>
 
               {/* Retry Speech / Text Input */}
@@ -1079,6 +1102,9 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}`;
                 <label className="field" htmlFor="answer2">
                   Your guided retry response
                 </label>
+                <div className="small" style={{ color: '#7a718c', marginBottom: '8px' }}>
+                  💡 Deliver your genuine spoken or typed response applying the model above.
+                </div>
                 <textarea
                   id="answer2"
                   placeholder="Apply your technique and share your second attempt here..."
