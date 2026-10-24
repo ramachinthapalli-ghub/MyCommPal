@@ -92,6 +92,39 @@ export default function MyCommPalApp() {
   const [practice1ScnAlign, setPractice1ScnAlign] = useState<ScenarioAlignment | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  // Progressive Disclosure View State
+  const [coachingTab, setCoachingTab] = useState<'coaching' | 'scores' | 'deep_dive'>('coaching');
+  const [deepDiveSections, setDeepDiveSections] = useState<Record<string, boolean>>({
+    evidence: true,
+    audit: false,
+    transcript: false,
+    cadence: false,
+  });
+  const [showFullComparison, setShowFullComparison] = useState(false);
+
+  function toggleDeepDiveSection(section: string) {
+    setDeepDiveSections(prev => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  }
+
+  function handleTabKeyDown(e: React.KeyboardEvent, currentTab: 'coaching' | 'scores' | 'deep_dive') {
+    const tabs: Array<'coaching' | 'scores' | 'deep_dive'> = ['coaching', 'scores', 'deep_dive'];
+    const idx = tabs.indexOf(currentTab);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextTab = tabs[(idx + 1) % tabs.length];
+      setCoachingTab(nextTab);
+      document.getElementById(`tab-${nextTab}`)?.focus();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevTab = tabs[(idx - 1 + tabs.length) % tabs.length];
+      setCoachingTab(prevTab);
+      document.getElementById(`tab-${prevTab}`)?.focus();
+    }
+  }
+
   // Quick User Feedback state
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
   const [feedbackTags, setFeedbackTags] = useState<string[]>([]);
@@ -357,6 +390,7 @@ export default function MyCommPalApp() {
       if (!res.ok) throw new Error(data.error || 'Failed to evaluate response');
 
       setAssessment(data);
+      setCoachingTab('coaching');
       setStep(2);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e: any) {
@@ -422,6 +456,7 @@ export default function MyCommPalApp() {
       }
 
       setComparison(data);
+      setShowFullComparison(false);
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     } catch (e: any) {
       setApiError(e.message || 'Comparison failed. Please retry.');
@@ -441,6 +476,7 @@ export default function MyCommPalApp() {
     }
     setAnswer2('');
     setComparison(null);
+    setShowFullComparison(false);
     setFeedbackSubmitted(false);
     setFeedbackRating(null);
     setFeedbackTags([]);
@@ -1031,312 +1067,544 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 </div>
               </div>
 
-              {/* Two-Layer Evaluation & Scenario Alignment */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '8px' }}>
-                <h2 style={{ margin: 0 }}>Communication Skill Assessment</h2>
-                <span className="tiny" style={{ background: '#eee8ff', padding: '4px 10px', borderRadius: '12px', color: '#5534c7', fontWeight: 700 }}>
-                  1–5 Rubric
-                </span>
-              </div>
-              <p className="tiny" style={{ marginBottom: '16px' }}>
-                Multidimensional assessment evaluated against observable communication behavioral anchors.
-              </p>
-
-              {/* Core Skill: Clarity */}
-              <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ffffff', borderRadius: '14px', border: '1px solid #eeebf5' }}>
-                <div className="skill" style={{ margin: '4px 0 6px' }}>
-                  <div className="skill-name">Clarity</div>
-                  <div className="bar">
-                    <div className="fill" style={{ width: `${(assessment.scores.clarity / 5) * 100}%` }} />
-                  </div>
-                  <div className="score">{assessment.scores.clarity}/5</div>
-                </div>
-                <p className="tiny" style={{ margin: 0, color: '#68607c', lineHeight: 1.45 }}>
-                  {assessment.scoreExplanations?.clarity ||
-                    (assessment.scores.clarity >= 4
-                      ? 'Clear and direct recommendation established early with strong focus.'
-                      : assessment.scores.clarity === 3
-                      ? 'Main point is understandable, but lacks immediate executive punch.'
-                      : 'Main point is buried under preamble, passive phrasing, or hesitation.')}
-                </p>
-              </div>
-
-              {/* Core Skill: Structure */}
-              <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ffffff', borderRadius: '14px', border: '1px solid #eeebf5' }}>
-                <div className="skill" style={{ margin: '4px 0 6px' }}>
-                  <div className="skill-name">Structure</div>
-                  <div className="bar">
-                    <div className="fill" style={{ width: `${(assessment.scores.structure / 5) * 100}%` }} />
-                  </div>
-                  <div className="score">{assessment.scores.structure}/5</div>
-                </div>
-                <p className="tiny" style={{ margin: 0, color: '#68607c', lineHeight: 1.45 }}>
-                  {assessment.scoreExplanations?.structure ||
-                    (assessment.scores.structure >= 4
-                      ? 'Follows a disciplined, recognizable communication framework with natural transitions.'
-                      : assessment.scores.structure === 3
-                      ? 'Basic sequential beginning-middle-end order, but transitions could be tighter.'
-                      : 'Ideas jump between context and conclusion without supporting bridges.')}
-                </p>
+              {/* Accessible Progressive Disclosure Tabs */}
+              <div
+                className="coaching-tablist"
+                role="tablist"
+                aria-label="Assessment views"
+              >
+                <button
+                  id="tab-coaching"
+                  type="button"
+                  role="tab"
+                  aria-selected={coachingTab === 'coaching'}
+                  aria-controls="panel-coaching"
+                  tabIndex={coachingTab === 'coaching' ? 0 : -1}
+                  className={`coaching-tab ${coachingTab === 'coaching' ? 'active' : ''}`}
+                  onClick={() => setCoachingTab('coaching')}
+                  onKeyDown={e => handleTabKeyDown(e, 'coaching')}
+                >
+                  🎯 My Coaching
+                </button>
+                <button
+                  id="tab-scores"
+                  type="button"
+                  role="tab"
+                  aria-selected={coachingTab === 'scores'}
+                  aria-controls="panel-scores"
+                  tabIndex={coachingTab === 'scores' ? 0 : -1}
+                  className={`coaching-tab ${coachingTab === 'scores' ? 'active' : ''}`}
+                  onClick={() => setCoachingTab('scores')}
+                  onKeyDown={e => handleTabKeyDown(e, 'scores')}
+                >
+                  📊 My Scores (5)
+                </button>
+                <button
+                  id="tab-deep_dive"
+                  type="button"
+                  role="tab"
+                  aria-selected={coachingTab === 'deep_dive'}
+                  aria-controls="panel-deep_dive"
+                  tabIndex={coachingTab === 'deep_dive' ? 0 : -1}
+                  className={`coaching-tab ${coachingTab === 'deep_dive' ? 'active' : ''}`}
+                  onClick={() => setCoachingTab('deep_dive')}
+                  onKeyDown={e => handleTabKeyDown(e, 'deep_dive')}
+                >
+                  🔍 Deep Dive
+                </button>
               </div>
 
-              {/* Core Skill: Conciseness */}
-              <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ffffff', borderRadius: '14px', border: '1px solid #eeebf5' }}>
-                <div className="skill" style={{ margin: '4px 0 6px' }}>
-                  <div className="skill-name">Conciseness</div>
-                  <div className="bar">
-                    <div className="fill" style={{ width: `${(assessment.scores.conciseness / 5) * 100}%` }} />
+              {/* TAB 1: MY COACHING (Default View: 10-Second Actionable Focus) */}
+              <div
+                id="panel-coaching"
+                role="tabpanel"
+                aria-labelledby="tab-coaching"
+                hidden={coachingTab !== 'coaching'}
+              >
+                {/* 1. One Genuine Strength */}
+                <div className="callout" style={{ background: '#f5fbf8', borderColor: '#c8edd9', borderLeft: '4px solid #1f9e76', margin: '14px 0 16px', padding: '16px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '18px' }}>🌟</span>
+                    <h3 style={{ margin: 0, color: '#16654a', fontSize: '15px' }}>
+                      Genuine Strength: {assessment.strongest}
+                    </h3>
                   </div>
-                  <div className="score">{assessment.scores.conciseness}/5</div>
-                </div>
-                <p className="tiny" style={{ margin: 0, color: '#68607c', lineHeight: 1.45 }}>
-                  {assessment.scoreExplanations?.conciseness ||
-                    (assessment.scores.conciseness >= 4
-                      ? 'Tight, focused delivery with a high signal-to-noise ratio and zero fluff.'
-                      : assessment.scores.conciseness === 3
-                      ? 'Reasonable brevity, but retains minor conversational padding.'
-                      : 'Either verbose with preamble or too sparse to convey key rationale.')}
-                </p>
-              </div>
-
-              {/* Goal-Specific Effectiveness */}
-              {assessment.goalEffectiveness && (
-                <div style={{ marginBottom: '16px', padding: '14px 16px', background: '#faf9fe', borderRadius: '14px', border: '1.5px solid #ece4ff' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <strong style={{ fontSize: '13.5px', color: '#3f385c' }}>
-                      Goal Execution: {assessment.goalEffectiveness.goal}
-                    </strong>
-                    <span className="tag" style={{ background: '#eaf8f2', color: '#1a7f5c', fontWeight: 700, fontSize: '11px' }}>
-                      Goal Specific
-                    </span>
-                  </div>
-                  <div className="skill" style={{ margin: '4px 0 6px' }}>
-                    <div className="skill-name" style={{ width: '160px' }}>{assessment.goalEffectiveness.goal} Quality</div>
-                    <div className="bar">
-                      <div className="fill" style={{ width: `${(assessment.goalEffectiveness.score / 5) * 100}%`, background: 'linear-gradient(90deg, #1f9e76, #4b91f9)' }} />
-                    </div>
-                    <div className="score" style={{ color: '#1f9e76' }}>{assessment.goalEffectiveness.score}/5</div>
-                  </div>
-                  <p className="tiny" style={{ margin: '2px 0 8px', color: '#554e66', lineHeight: 1.45 }}>
-                    {assessment.scoreExplanations?.goalEffectiveness || assessment.goalEffectiveness.rationale}
+                  <p style={{ margin: 0, color: '#1f513b', fontSize: '13.5px', lineHeight: 1.5 }}>
+                    {(assessment.scoreExplanations as any)?.[assessment.strongest.toLowerCase()] ||
+                      `Your ${assessment.strongest.toLowerCase()} established a strong baseline with clear communicative intent.`}
                   </p>
-                  {assessment.goalEffectiveness.criteriaResults && assessment.goalEffectiveness.criteriaResults.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginTop: '8px' }}>
-                      {assessment.goalEffectiveness.criteriaResults.map((c, i) => (
-                        <div key={i} style={{ padding: '6px 10px', background: '#ffffff', borderRadius: '8px', fontSize: '11.5px', border: '1px solid #eee8fa' }}>
-                          <span style={{ color: c.status === 'met' ? '#1f9e76' : c.status === 'partially_met' ? '#d97706' : '#dc2626', fontWeight: 700, marginRight: '6px' }}>
-                            {c.status === 'met' ? '✓' : c.status === 'partially_met' ? '◐' : '✕'}
-                          </span>
-                          <strong>{c.criterion}</strong>: <span style={{ color: '#68607c' }}>{c.note}</span>
-                        </div>
-                      ))}
+                </div>
+
+                {/* 2. One Primary Improvement Area Grounded in Response */}
+                <div className="callout" style={{ borderLeft: '4px solid #7153de', background: '#fbf9ff', margin: '14px 0 16px', padding: '16px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '18px' }}>🎯</span>
+                    <h3 style={{ margin: 0, color: '#5534c7', fontSize: '15px' }}>
+                      Primary Focus: {assessment.focus.toUpperCase()}
+                    </h3>
+                  </div>
+                  <p style={{ margin: '0 0 10px', color: '#3a3455', fontSize: '13.5px', lineHeight: 1.5 }}>
+                    {assessment.focusExplanation}
+                  </p>
+                  {(assessment.highlights?.[0] || assessment.evidenceCoaching?.whatNeedsWork) && (
+                    <div style={{ padding: '10px 14px', background: '#ffffff', borderRadius: '12px', border: '1px solid #eeebf8', fontSize: '13px' }}>
+                      <div style={{ color: '#7a718c', fontWeight: 600, marginBottom: '3px' }}>
+                        Audience perception from what you said:
+                      </div>
+                      <div className="quote" style={{ margin: '4px 0 6px', fontSize: '13px', borderLeftColor: '#7153de', background: '#faf9fe' }}>
+                        “{(assessment.highlights?.[0]?.quote || assessment.evidenceCoaching?.whatNeedsWork?.quote || '').slice(0, 140)}”
+                      </div>
+                      <div style={{ color: '#5534c7', fontSize: '12.5px', fontWeight: 600 }}>
+                        ↳ {assessment.highlights?.[0]?.issue || assessment.evidenceCoaching?.whatNeedsWork?.audienceImpact}
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
 
-              {/* Scenario Alignment Score */}
-              {assessment.scenarioAlignment && (
-                <div style={{ marginBottom: '20px', padding: '14px 16px', background: '#fdfbfe', border: '1.5px solid #ece4ff', borderRadius: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <strong style={{ fontSize: '13.5px', color: '#3f385c' }}>Scenario Alignment Audit</strong>
-                    <span className="tag" style={{ background: assessment.scenarioAlignment.score >= 4 ? '#eaf8f2' : assessment.scenarioAlignment.score >= 3 ? '#fef3c7' : '#fee2e2', color: assessment.scenarioAlignment.score >= 4 ? '#1a7f5c' : assessment.scenarioAlignment.score >= 3 ? '#92400e' : '#b91c1c', fontSize: '11px' }}>
-                      {assessment.scenarioAlignment.score}/5 {assessment.scenarioAlignment.score >= 4 ? 'Complete' : assessment.scenarioAlignment.score >= 3 ? 'Partial' : 'Needs Focus'}
-                    </span>
+                {/* 3. One Relevant Technique & Concise Contextual Example */}
+                <div className="callout" style={{ borderLeft: '4px solid #4f46e5', background: '#ffffff', border: '1.5px solid #ece4ff', borderRadius: '16px', margin: '14px 0 20px', padding: '18px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '18px' }}>🛠️</span>
+                    <h3 style={{ margin: 0, color: '#4338ca', fontSize: '15px' }}>
+                      Recommended Technique: {assessment.technique.name}
+                    </h3>
                   </div>
-                  <div className="skill" style={{ margin: '4px 0 6px' }}>
-                    <div className="skill-name">Scenario Alignment</div>
-                    <div className="bar">
-                      <div className="fill" style={{ width: `${(assessment.scenarioAlignment.score / 5) * 100}%`, background: 'linear-gradient(90deg, #7153de, #a78bfa)' }} />
-                    </div>
-                    <div className="score" style={{ color: '#7153de' }}>{assessment.scenarioAlignment.score}/5</div>
-                  </div>
-                  <p className="tiny" style={{ margin: '2px 0 8px', color: '#554e66', lineHeight: 1.45 }}>
-                    {assessment.scoreExplanations?.scenarioAlignment || assessment.scenarioAlignment.rationale}
-                  </p>
-                  {assessment.scenarioAlignment.requiredElements && assessment.scenarioAlignment.requiredElements.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-                      {assessment.scenarioAlignment.requiredElements.map((el, i) => (
-                        <div key={i} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ color: el.addressed ? '#1f9e76' : '#d97706', fontWeight: 800 }}>
-                            {el.addressed ? '✓' : '○'}
-                          </span>
-                          <span style={{ color: el.addressed ? '#3f385c' : '#7a718c' }}>
-                            {el.element}
-                          </span>
-                          {el.evidence && (
-                            <span className="tiny" style={{ color: '#938aa8', fontStyle: 'italic' }}>
-                              ({el.evidence})
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Focus Skill Card */}
-              <div className="callout" style={{ borderLeft: '4px solid #7153de', background: '#fbf9ff' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '16px' }}>🎯</span>
-                  <h3 style={{ margin: 0, color: '#5534c7' }}>Primary Focus: {assessment.focus.toUpperCase()}</h3>
-                </div>
-                <p style={{ margin: 0, color: '#3a3455', fontSize: '13.5px', lineHeight: 1.5 }}>
-                  {assessment.focusExplanation}
-                </p>
-              </div>
-
-              {/* Explainable Feedback & Evidence (Requirement 6) */}
-              <div style={{ marginTop: '24px' }}>
-                <h2>Explainable Feedback & Evidence</h2>
-                <p className="tiny" style={{ marginBottom: '14px' }}>
-                  Direct observations and concrete suggestions grounded in your actual spoken or typed words:
-                </p>
-
-                {assessment.highlights && assessment.highlights.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-                    {assessment.highlights.map((h, idx) => (
-                      <div key={idx} className="callout" style={{ background: '#ffffff', border: '1.5px solid #ece4ff', borderRadius: '16px', padding: '16px 18px', margin: 0 }}>
-                        <div style={{ marginBottom: '10px' }}>
-                          <div className="tiny" style={{ fontWeight: 700, color: '#7a718c', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-                            💬 What you said:
-                          </div>
-                          <div className="quote" style={{ margin: 0, borderLeftColor: '#7153de', background: '#fcfaff', fontSize: '13.5px', color: '#1f1635' }}>
-                            “{h.quote}”
-                          </div>
-                        </div>
-
-                        <div style={{ marginBottom: '10px', padding: '10px 14px', background: '#f8f6ff', borderRadius: '10px' }}>
-                          <strong style={{ fontSize: '12.5px', color: '#5534c7', display: 'block', marginBottom: '2px' }}>
-                            👩‍💼 Vira&apos;s observation:
-                          </strong>
-                          <p style={{ margin: 0, fontSize: '13px', color: '#443c5b', lineHeight: 1.45 }}>
-                            {h.issue}
-                          </p>
-                        </div>
-
-                        <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: '10px', borderLeft: '3px solid #16a34a' }}>
-                          <strong style={{ fontSize: '12.5px', color: '#16654a', display: 'block', marginBottom: '2px' }}>
-                            💡 Suggested improvement:
-                          </strong>
-                          <p style={{ margin: 0, fontSize: '13px', color: '#14532d', lineHeight: 1.45 }}>
-                            {h.suggestion}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  assessment.evidenceCoaching && (
-                    <div className="callout" style={{ background: '#ffffff', border: '1.5px solid #ece4ff', borderRadius: '16px', padding: '16px 18px', margin: '0 0 20px' }}>
-                      <div style={{ marginBottom: '10px' }}>
-                        <div className="tiny" style={{ fontWeight: 700, color: '#7a718c', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-                          💬 What you said:
-                        </div>
-                        <div className="quote" style={{ margin: 0, borderLeftColor: '#f97316', background: '#fcfaff', fontSize: '13.5px', color: '#1f1635' }}>
-                          “{assessment.evidenceCoaching.whatNeedsWork.quote}”
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: '10px', padding: '10px 14px', background: '#f8f6ff', borderRadius: '10px' }}>
-                        <strong style={{ fontSize: '12.5px', color: '#5534c7', display: 'block', marginBottom: '2px' }}>
-                          👩‍💼 Vira&apos;s observation:
-                        </strong>
-                        <p style={{ margin: 0, fontSize: '13px', color: '#443c5b', lineHeight: 1.45 }}>
-                          {assessment.evidenceCoaching.whatNeedsWork.audienceImpact}
-                        </p>
-                      </div>
-                      <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: '10px', borderLeft: '3px solid #16a34a' }}>
-                        <strong style={{ fontSize: '12.5px', color: '#16654a', display: 'block', marginBottom: '2px' }}>
-                          💡 Suggested improvement:
-                        </strong>
-                        <p style={{ margin: 0, fontSize: '13px', color: '#14532d', lineHeight: 1.45 }}>
-                          Say this instead: “{assessment.evidenceCoaching.nextChallenge.sentenceStarter}”
-                        </p>
-                      </div>
-                    </div>
-                  )
-                )}
-
-                {/* Recommended Technique with Dynamic Contextual Model Script */}
-                <h2>Recommended Technique: {assessment.technique.name}</h2>
-                <div className="callout" style={{ borderLeft: '4px solid #7153de', background: '#ffffff' }}>
-                  <div style={{ margin: '4px 0 12px' }}>
+                  <div style={{ margin: '8px 0 12px' }}>
                     {assessment.technique.steps.map((st, i) => (
-                      <p key={i} style={{ fontWeight: 600, margin: '4px 0', fontSize: '13.5px', color: '#3f385c' }}>
+                      <p key={i} style={{ fontWeight: 600, margin: '4px 0', fontSize: '13px', color: '#3f385c' }}>
                         {st}
                       </p>
                     ))}
                   </div>
-                  <div className="quote" style={{ marginTop: '12px', borderLeftColor: '#7153de', background: '#fcfaff' }}>
-                    <strong style={{ color: '#5534c7', display: 'block', marginBottom: '4px' }}>
-                      💡 Tailored Model Script for Your Exact Scenario:
+                  <div className="quote" style={{ margin: 0, borderLeftColor: '#4f46e5', background: '#fcfaff', fontSize: '13px' }}>
+                    <strong style={{ color: '#4338ca', display: 'block', marginBottom: '4px' }}>
+                      💡 Tailored Model Script for Your Scenario:
                     </strong>
                     {assessment.technique.example}
                   </div>
                 </div>
-              </div>
 
-              {/* Personalized Practice Schedule Builder */}
-              <h2>Your Practice Cadence</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', margin: '14px 0' }}>
-                <div>
-                  <label className="field" htmlFor="durationSelect">
-                    Session Duration
-                  </label>
-                  <select
-                    id="durationSelect"
-                    value={planMinutes}
-                    onChange={e => setPlanMinutes(Number(e.target.value))}
-                  >
-                    <option value={3}>3 minutes (quick micro-drill)</option>
-                    <option value={5}>5 minutes (recommended)</option>
-                    <option value={10}>10 minutes (deep rehearsal)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="field" htmlFor="freqSelect">
-                    Sessions This Week
-                  </label>
-                  <select
-                    id="freqSelect"
-                    value={planFrequency}
-                    onChange={e => setPlanFrequency(Number(e.target.value))}
-                  >
-                    <option value={1}>1 session</option>
-                    <option value={2}>2 sessions</option>
-                    <option value={3}>3 sessions (recommended)</option>
-                    <option value={5}>5 sessions</option>
-                  </select>
+                {/* Prominent Practice Action */}
+                <div className="actions" style={{ marginTop: '20px' }}>
+                  <button className="btn" onClick={() => setStep(3)} style={{ padding: '14px 28px', fontSize: '15px' }}>
+                    Practice this technique now →
+                  </button>
+                  <button className="btn ghost" onClick={() => setStep(1)}>
+                    ← Re-record Baseline
+                  </button>
                 </div>
               </div>
 
-              <div className="plan">
-                {Array.from({ length: planFrequency }).map((_, i) => (
-                  <div key={i} className="day">
-                    <span className="tag">Practice {i + 1}</span>
-                    <strong>{i === 0 ? assessment.focus : i === 1 ? 'Apply technique' : 'Fluency & brevity'}</strong>
-                    <div>
-                      {i === 0
-                        ? `Focus directly on ${assessment.focus} using ${assessment.technique.name}.`
-                        : i === 1
-                        ? 'Practice with follow-up pressure questions.'
-                        : 'Rehearse with real stakeholders.'}
+              {/* TAB 2: MY SCORES (Secondary View: 5-Skill Rubric with Explanations) */}
+              <div
+                id="panel-scores"
+                role="tabpanel"
+                aria-labelledby="tab-scores"
+                hidden={coachingTab !== 'scores'}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', marginBottom: '8px' }}>
+                  <h2 style={{ margin: 0 }}>Communication Skill Assessment</h2>
+                  <span className="tiny" style={{ background: '#eee8ff', padding: '4px 10px', borderRadius: '12px', color: '#5534c7', fontWeight: 700 }}>
+                    1–5 Rubric
+                  </span>
+                </div>
+                <p className="tiny" style={{ marginBottom: '16px' }}>
+                  Evaluated across 5 independent dimensions based on observable behavioral anchors. No overall score that hides specific communication differences.
+                </p>
+
+                {/* Core Skill: Clarity */}
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ffffff', borderRadius: '14px', border: '1px solid #eeebf5' }}>
+                  <div className="skill" style={{ margin: '4px 0 6px' }}>
+                    <div className="skill-name">Clarity</div>
+                    <div className="bar">
+                      <div className="fill" style={{ width: `${(assessment.scores.clarity / 5) * 100}%` }} />
                     </div>
-                    <div className="tiny" style={{ marginTop: '8px' }}>
-                      {planMinutes} minutes
-                    </div>
+                    <div className="score">{assessment.scores.clarity}/5</div>
                   </div>
-                ))}
+                  <p className="tiny" style={{ margin: 0, color: '#68607c', lineHeight: 1.45 }}>
+                    {assessment.scoreExplanations?.clarity ||
+                      (assessment.scores.clarity >= 4
+                        ? 'Clear and direct recommendation established early with strong focus.'
+                        : assessment.scores.clarity === 3
+                        ? 'Main point is understandable, but lacks immediate executive punch.'
+                        : 'Main point is buried under preamble, passive phrasing, or hesitation.')}
+                  </p>
+                </div>
+
+                {/* Core Skill: Structure */}
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ffffff', borderRadius: '14px', border: '1px solid #eeebf5' }}>
+                  <div className="skill" style={{ margin: '4px 0 6px' }}>
+                    <div className="skill-name">Structure</div>
+                    <div className="bar">
+                      <div className="fill" style={{ width: `${(assessment.scores.structure / 5) * 100}%` }} />
+                    </div>
+                    <div className="score">{assessment.scores.structure}/5</div>
+                  </div>
+                  <p className="tiny" style={{ margin: 0, color: '#68607c', lineHeight: 1.45 }}>
+                    {assessment.scoreExplanations?.structure ||
+                      (assessment.scores.structure >= 4
+                        ? 'Follows a disciplined, recognizable communication framework with natural transitions.'
+                        : assessment.scores.structure === 3
+                        ? 'Basic sequential beginning-middle-end order, but transitions could be tighter.'
+                        : 'Ideas jump between context and conclusion without supporting bridges.')}
+                  </p>
+                </div>
+
+                {/* Core Skill: Conciseness */}
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ffffff', borderRadius: '14px', border: '1px solid #eeebf5' }}>
+                  <div className="skill" style={{ margin: '4px 0 6px' }}>
+                    <div className="skill-name">Conciseness</div>
+                    <div className="bar">
+                      <div className="fill" style={{ width: `${(assessment.scores.conciseness / 5) * 100}%` }} />
+                    </div>
+                    <div className="score">{assessment.scores.conciseness}/5</div>
+                  </div>
+                  <p className="tiny" style={{ margin: 0, color: '#68607c', lineHeight: 1.45 }}>
+                    {assessment.scoreExplanations?.conciseness ||
+                      (assessment.scores.conciseness >= 4
+                        ? 'Tight, focused delivery with a high signal-to-noise ratio and zero fluff.'
+                        : assessment.scores.conciseness === 3
+                        ? 'Reasonable brevity, but retains minor conversational padding.'
+                        : 'Either verbose with preamble or too sparse to convey key rationale.')}
+                  </p>
+                </div>
+
+                {/* Goal-Specific Effectiveness */}
+                {assessment.goalEffectiveness && (
+                  <div style={{ marginBottom: '16px', padding: '14px 16px', background: '#faf9fe', borderRadius: '14px', border: '1.5px solid #ece4ff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <strong style={{ fontSize: '13.5px', color: '#3f385c' }}>
+                        Goal Execution: {assessment.goalEffectiveness.goal}
+                      </strong>
+                      <span className="tag" style={{ background: '#eaf8f2', color: '#1a7f5c', fontWeight: 700, fontSize: '11px' }}>
+                        Goal Specific
+                      </span>
+                    </div>
+                    <div className="skill" style={{ margin: '4px 0 6px' }}>
+                      <div className="skill-name" style={{ width: '160px' }}>{assessment.goalEffectiveness.goal} Quality</div>
+                      <div className="bar">
+                        <div className="fill" style={{ width: `${(assessment.goalEffectiveness.score / 5) * 100}%`, background: 'linear-gradient(90deg, #1f9e76, #4b91f9)' }} />
+                      </div>
+                      <div className="score" style={{ color: '#1f9e76' }}>{assessment.goalEffectiveness.score}/5</div>
+                    </div>
+                    <p className="tiny" style={{ margin: '2px 0 8px', color: '#554e66', lineHeight: 1.45 }}>
+                      {assessment.scoreExplanations?.goalEffectiveness || assessment.goalEffectiveness.rationale}
+                    </p>
+                    {assessment.goalEffectiveness.criteriaResults && assessment.goalEffectiveness.criteriaResults.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginTop: '8px' }}>
+                        {assessment.goalEffectiveness.criteriaResults.map((c, i) => (
+                          <div key={i} style={{ padding: '6px 10px', background: '#ffffff', borderRadius: '8px', fontSize: '11.5px', border: '1px solid #eee8fa' }}>
+                            <span style={{ color: c.status === 'met' ? '#1f9e76' : c.status === 'partially_met' ? '#d97706' : '#dc2626', fontWeight: 700, marginRight: '6px' }}>
+                              {c.status === 'met' ? '✓' : c.status === 'partially_met' ? '◐' : '✕'}
+                            </span>
+                            <strong>{c.criterion}</strong>: <span style={{ color: '#68607c' }}>{c.note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Scenario Alignment Score */}
+                {assessment.scenarioAlignment && (
+                  <div style={{ marginBottom: '20px', padding: '14px 16px', background: '#fdfbfe', border: '1.5px solid #ece4ff', borderRadius: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <strong style={{ fontSize: '13.5px', color: '#3f385c' }}>Scenario Alignment Audit</strong>
+                      <span className="tag" style={{ background: assessment.scenarioAlignment.score >= 4 ? '#eaf8f2' : assessment.scenarioAlignment.score >= 3 ? '#fef3c7' : '#fee2e2', color: assessment.scenarioAlignment.score >= 4 ? '#1a7f5c' : assessment.scenarioAlignment.score >= 3 ? '#92400e' : '#b91c1c', fontSize: '11px' }}>
+                        {assessment.scenarioAlignment.score}/5 {assessment.scenarioAlignment.score >= 4 ? 'Complete' : assessment.scenarioAlignment.score >= 3 ? 'Partial' : 'Needs Focus'}
+                      </span>
+                    </div>
+                    <div className="skill" style={{ margin: '4px 0 6px' }}>
+                      <div className="skill-name">Scenario Alignment</div>
+                      <div className="bar">
+                        <div className="fill" style={{ width: `${(assessment.scenarioAlignment.score / 5) * 100}%`, background: 'linear-gradient(90deg, #7153de, #a78bfa)' }} />
+                      </div>
+                      <div className="score" style={{ color: '#7153de' }}>{assessment.scenarioAlignment.score}/5</div>
+                    </div>
+                    <p className="tiny" style={{ margin: '2px 0 8px', color: '#554e66', lineHeight: 1.45 }}>
+                      {assessment.scoreExplanations?.scenarioAlignment || assessment.scenarioAlignment.rationale}
+                    </p>
+                    {assessment.scenarioAlignment.requiredElements && assessment.scenarioAlignment.requiredElements.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                        {assessment.scenarioAlignment.requiredElements.map((el, i) => (
+                          <div key={i} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: el.addressed ? '#1f9e76' : '#d97706', fontWeight: 800 }}>
+                              {el.addressed ? '✓' : '○'}
+                            </span>
+                            <span style={{ color: el.addressed ? '#3f385c' : '#7a718c' }}>
+                              {el.element}
+                            </span>
+                            {el.evidence && (
+                              <span className="tiny" style={{ color: '#938aa8', fontStyle: 'italic' }}>
+                                ({el.evidence})
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="actions" style={{ marginTop: '20px' }}>
+                  <button className="btn" onClick={() => setStep(3)}>
+                    Practice this technique now →
+                  </button>
+                  <button className="btn ghost" onClick={() => setCoachingTab('coaching')}>
+                    ← Back to My Coaching
+                  </button>
+                </div>
               </div>
 
-              <div className="actions">
-                <button className="btn" onClick={() => setStep(3)}>
-                  Practice this now →
-                </button>
-                <button className="btn ghost" onClick={() => setStep(1)}>
-                  ← Re-record Baseline
-                </button>
+              {/* TAB 3: DEEP DIVE (Expandable Accordions: Verbatim Evidence, Audit, Transcript, Cadence) */}
+              <div
+                id="panel-deep_dive"
+                role="tabpanel"
+                aria-labelledby="tab-deep_dive"
+                hidden={coachingTab !== 'deep_dive'}
+              >
+                <p className="tiny" style={{ margin: '10px 0 16px', color: '#68607c' }}>
+                  Deep inspection and verifiable evidence behind your assessment. Expand any section to review details.
+                </p>
+
+                {/* Accordion 1: Verbatim Highlights & Concrete Suggestions */}
+                <div className="accordion-item">
+                  <button
+                    type="button"
+                    className="accordion-trigger"
+                    aria-expanded={deepDiveSections.evidence}
+                    onClick={() => toggleDeepDiveSection('evidence')}
+                  >
+                    <span>💬 Verbatim Highlights & Phrasings ({assessment.highlights?.length || (assessment.evidenceCoaching ? 1 : 0)})</span>
+                    <span>{deepDiveSections.evidence ? '▲' : '▼'}</span>
+                  </button>
+                  {deepDiveSections.evidence && (
+                    <div className="accordion-body">
+                      {assessment.highlights && assessment.highlights.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          {assessment.highlights.map((h, idx) => (
+                            <div key={idx} style={{ background: '#fcfaff', border: '1px solid #eeebf8', borderRadius: '14px', padding: '14px 16px' }}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <div className="tiny" style={{ fontWeight: 700, color: '#7a718c', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                  💬 What you said:
+                                </div>
+                                <div className="quote" style={{ margin: 0, borderLeftColor: '#7153de', background: '#ffffff', fontSize: '13px' }}>
+                                  “{h.quote}”
+                                </div>
+                              </div>
+                              <div style={{ marginBottom: '8px', padding: '8px 12px', background: '#f5f2ff', borderRadius: '8px' }}>
+                                <strong style={{ fontSize: '12px', color: '#5534c7', display: 'block', marginBottom: '2px' }}>
+                                  👩‍💼 Vira&apos;s observation:
+                                </strong>
+                                <p style={{ margin: 0, fontSize: '12.5px', color: '#443c5b' }}>
+                                  {h.issue}
+                                </p>
+                              </div>
+                              <div style={{ padding: '8px 12px', background: '#f0fdf4', borderRadius: '8px', borderLeft: '3px solid #16a34a' }}>
+                                <strong style={{ fontSize: '12px', color: '#16654a', display: 'block', marginBottom: '2px' }}>
+                                  💡 Suggested phrasing:
+                                </strong>
+                                <p style={{ margin: 0, fontSize: '12.5px', color: '#14532d' }}>
+                                  {h.suggestion}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : assessment.evidenceCoaching ? (
+                        <div style={{ background: '#fcfaff', border: '1px solid #eeebf8', borderRadius: '14px', padding: '14px 16px' }}>
+                          <div style={{ marginBottom: '8px' }}>
+                            <div className="tiny" style={{ fontWeight: 700, color: '#7a718c', textTransform: 'uppercase', marginBottom: '4px' }}>
+                              💬 What you said:
+                            </div>
+                            <div className="quote" style={{ margin: 0, borderLeftColor: '#f97316', background: '#ffffff', fontSize: '13px' }}>
+                              “{assessment.evidenceCoaching.whatNeedsWork.quote}”
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: '8px', padding: '8px 12px', background: '#f5f2ff', borderRadius: '8px' }}>
+                            <strong style={{ fontSize: '12px', color: '#5534c7', display: 'block', marginBottom: '2px' }}>
+                              👩‍💼 Vira&apos;s observation:
+                            </strong>
+                            <p style={{ margin: 0, fontSize: '12.5px', color: '#443c5b' }}>
+                              {assessment.evidenceCoaching.whatNeedsWork.audienceImpact}
+                            </p>
+                          </div>
+                          <div style={{ padding: '8px 12px', background: '#f0fdf4', borderRadius: '8px', borderLeft: '3px solid #16a34a' }}>
+                            <strong style={{ fontSize: '12px', color: '#16654a', display: 'block', marginBottom: '2px' }}>
+                              💡 Suggested phrasing:
+                            </strong>
+                            <p style={{ margin: 0, fontSize: '12.5px', color: '#14532d' }}>
+                              Say this instead: “{assessment.evidenceCoaching.nextChallenge.sentenceStarter}”
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="tiny" style={{ margin: 0, color: '#7a718c' }}>No specific verbatim flags recorded.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Accordion 2: Scenario & Goal Criteria Audit */}
+                <div className="accordion-item">
+                  <button
+                    type="button"
+                    className="accordion-trigger"
+                    aria-expanded={deepDiveSections.audit}
+                    onClick={() => toggleDeepDiveSection('audit')}
+                  >
+                    <span>📋 Scenario Alignment & Goal Criteria Audit</span>
+                    <span>{deepDiveSections.audit ? '▲' : '▼'}</span>
+                  </button>
+                  {deepDiveSections.audit && (
+                    <div className="accordion-body">
+                      {assessment.scenarioAlignment && (assessment.scenarioAlignment.requiredElements?.length || 0) > 0 && (
+                        <div style={{ marginBottom: '16px' }}>
+                          <strong style={{ fontSize: '13px', color: '#2e264a', display: 'block', marginBottom: '6px' }}>
+                            Required Scenario Elements ({assessment.scenarioAlignment.score}/5):
+                          </strong>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {assessment.scenarioAlignment.requiredElements?.map((el, i) => (
+                              <div key={i} style={{ fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: el.addressed ? '#1f9e76' : '#d97706', fontWeight: 800 }}>
+                                  {el.addressed ? '✓' : '○'}
+                                </span>
+                                <span style={{ color: el.addressed ? '#3f385c' : '#7a718c' }}>
+                                  {el.element}
+                                </span>
+                                {el.evidence && (
+                                  <span className="tiny" style={{ color: '#938aa8', fontStyle: 'italic' }}>
+                                    — &quot;{el.evidence}&quot;
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {assessment.goalEffectiveness && (assessment.goalEffectiveness.criteriaResults?.length || 0) > 0 && (
+                        <div>
+                          <strong style={{ fontSize: '13px', color: '#2e264a', display: 'block', marginBottom: '6px' }}>
+                            {assessment.goalEffectiveness.goal} Evaluation Criteria ({assessment.goalEffectiveness.score}/5):
+                          </strong>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+                            {assessment.goalEffectiveness.criteriaResults?.map((c, i) => (
+                              <div key={i} style={{ padding: '8px 10px', background: '#fbf9ff', borderRadius: '8px', fontSize: '12px', border: '1px solid #eee8fa' }}>
+                                <span style={{ color: c.status === 'met' ? '#1f9e76' : c.status === 'partially_met' ? '#d97706' : '#dc2626', fontWeight: 700, marginRight: '6px' }}>
+                                  {c.status === 'met' ? '✓' : c.status === 'partially_met' ? '◐' : '✕'}
+                                </span>
+                                <strong>{c.criterion}</strong>: <span style={{ color: '#68607c' }}>{c.note}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Accordion 3: Full Original Response & Telemetry */}
+                <div className="accordion-item">
+                  <button
+                    type="button"
+                    className="accordion-trigger"
+                    aria-expanded={deepDiveSections.transcript}
+                    onClick={() => toggleDeepDiveSection('transcript')}
+                  >
+                    <span>🎙️ Verbatim Baseline Response & Telemetry</span>
+                    <span>{deepDiveSections.transcript ? '▲' : '▼'}</span>
+                  </button>
+                  {deepDiveSections.transcript && (
+                    <div className="accordion-body">
+                      <div className="quote" style={{ margin: '0 0 12px', fontSize: '13px', borderLeftColor: '#7153de' }}>
+                        “{answer1}”
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '12px', color: '#68607c' }}>
+                        <span>📊 <strong>Word count:</strong> {answer1.trim().split(/\s+/).filter(Boolean).length} words</span>
+                        <span>⏱️ <strong>Est. spoken duration:</strong> ~{Math.round((answer1.trim().split(/\s+/).filter(Boolean).length / 130) * 60)}s</span>
+                        <span>🎯 <strong>Goal:</strong> {goal}</span>
+                        <span>👥 <strong>Audience:</strong> {audience}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Accordion 4: Practice Cadence & Schedule Builder */}
+                <div className="accordion-item">
+                  <button
+                    type="button"
+                    className="accordion-trigger"
+                    aria-expanded={deepDiveSections.cadence}
+                    onClick={() => toggleDeepDiveSection('cadence')}
+                  >
+                    <span>📅 Practice Cadence & Schedule Builder</span>
+                    <span>{deepDiveSections.cadence ? '▲' : '▼'}</span>
+                  </button>
+                  {deepDiveSections.cadence && (
+                    <div className="accordion-body">
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', margin: '0 0 14px' }}>
+                        <div>
+                          <label className="field" htmlFor="durationSelect">
+                            Session Duration
+                          </label>
+                          <select
+                            id="durationSelect"
+                            value={planMinutes}
+                            onChange={e => setPlanMinutes(Number(e.target.value))}
+                          >
+                            <option value={3}>3 minutes (quick micro-drill)</option>
+                            <option value={5}>5 minutes (recommended)</option>
+                            <option value={10}>10 minutes (deep rehearsal)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="field" htmlFor="freqSelect">
+                            Sessions This Week
+                          </label>
+                          <select
+                            id="freqSelect"
+                            value={planFrequency}
+                            onChange={e => setPlanFrequency(Number(e.target.value))}
+                          >
+                            <option value={1}>1 session</option>
+                            <option value={2}>2 sessions</option>
+                            <option value={3}>3 sessions (recommended)</option>
+                            <option value={5}>5 sessions</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="plan">
+                        {Array.from({ length: planFrequency }).map((_, i) => (
+                          <div key={i} className="day">
+                            <span className="tag">Practice {i + 1}</span>
+                            <strong>{i === 0 ? assessment.focus : i === 1 ? 'Apply technique' : 'Fluency & brevity'}</strong>
+                            <div>
+                              {i === 0
+                                ? `Focus directly on ${assessment.focus} using ${assessment.technique.name}.`
+                                : i === 1
+                                ? 'Practice with follow-up pressure questions.'
+                                : 'Rehearse with real stakeholders.'}
+                            </div>
+                            <div className="tiny" style={{ marginTop: '8px' }}>
+                              {planMinutes} minutes
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="actions" style={{ marginTop: '20px' }}>
+                  <button className="btn" onClick={() => setStep(3)}>
+                    Practice this technique now →
+                  </button>
+                  <button className="btn ghost" onClick={() => setCoachingTab('coaching')}>
+                    ← Back to My Coaching
+                  </button>
+                </div>
               </div>
             </section>
           )}
@@ -1447,80 +1715,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   <span className="eyebrow">PRACTICE RESULTS</span>
                   <h2 style={{ marginBottom: '14px' }}>Your Progress With Vira</h2>
 
-                  {/* Multidimensional Progress Summary Table (Supporting Baseline -> Practice 1 -> Practice 2) */}
-                  <div style={{ margin: '14px 0 20px', overflowX: 'auto', background: '#ffffff', border: '1px solid #ebe6f5', borderRadius: '16px', padding: '6px 12px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13.5px' }} aria-label="Progress comparison between baseline and practice attempts">
-                      <thead>
-                        <tr style={{ borderBottom: '1.5px solid #ede7fb', color: '#68607c' }}>
-                          <th style={{ padding: '12px 10px', fontWeight: 700 }}>Skill</th>
-                          <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Baseline</th>
-                          <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Practice 1</th>
-                          {comparison.hasPractice2 && (
-                            <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'center' }}>Practice 2</th>
-                          )}
-                          <th style={{ padding: '12px 10px', fontWeight: 700, textAlign: 'right' }}>Trend</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(comparison.multiAttemptRows && comparison.multiAttemptRows.length > 0
-                          ? comparison.multiAttemptRows
-                          : Object.values(comparison.dimensions || {}).map(d => ({
-                              skill:
-                                d.dimension === 'goalEffectiveness'
-                                  ? `${goal} Quality`
-                                  : d.dimension === 'scenarioAlignment'
-                                  ? 'Scenario Alignment'
-                                  : d.dimension.charAt(0).toUpperCase() + d.dimension.slice(1),
-                              baseline: d.originalScore,
-                              practice1: d.revisedScore,
-                              practice2: undefined,
-                              trend: d.classification,
-                              change: d.change,
-                            }))
-                        ).map((row, idx, arr) => {
-                          const isImproved = row.trend === 'improved';
-                          const isDeclined = row.trend === 'declined';
-
-                          return (
-                            <tr key={idx} style={{ borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #f2edf9' }}>
-                              <td style={{ padding: '12px 10px', fontWeight: 600, color: '#2d254b' }}>
-                                {row.skill}
-                              </td>
-                              <td style={{ padding: '12px 10px', textAlign: 'center', color: '#7a718c', fontWeight: 600 }}>
-                                {row.baseline}/5
-                              </td>
-                              <td style={{ padding: '12px 10px', textAlign: 'center', color: !comparison.hasPractice2 ? (isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#3f385c') : '#7a718c', fontWeight: 600 }}>
-                                {row.practice1 !== undefined ? `${row.practice1}/5` : '—'}
-                              </td>
-                              {comparison.hasPractice2 && (
-                                <td style={{ padding: '12px 10px', textAlign: 'center', color: isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#3f385c', fontWeight: 700 }}>
-                                  {row.practice2 !== undefined ? `${row.practice2}/5` : '—'}
-                                </td>
-                              )}
-                              <td style={{ padding: '12px 10px', textAlign: 'right' }}>
-                                <span
-                                  className="tag"
-                                  style={{
-                                    fontSize: '11px',
-                                    padding: '4px 10px',
-                                    borderRadius: '8px',
-                                    background: isImproved ? '#eaf8f2' : isDeclined ? '#fee2e2' : '#f1f0f5',
-                                    color: isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#524b68',
-                                    fontWeight: 700,
-                                    display: 'inline-block',
-                                  }}
-                                >
-                                  {isImproved ? `+${row.change > 0 ? row.change : 1} Improved` : isDeclined ? `${row.change < 0 ? row.change : -1} Declined` : 'Similar'}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Vira's Progress Insight (Requirement 3: Most Prominent Part of Results) */}
+                  {/* 1. Vira's Progress Insight (Summary-First: Most Prominent Part of Results at Top) */}
                   <div
                     className="callout"
                     style={{
@@ -1546,7 +1741,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     </p>
                   </div>
 
-                  {/* What Improved and What Still Needs Work (Requirement 4) */}
+                  {/* 2. What Improved and What Still Needs Work (Requirement 4) */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', margin: '20px 0' }}>
                     {/* What Improved */}
                     <div className="callout" style={{ background: '#f5fbf8', borderColor: '#c8edd9', borderLeft: '4px solid #1f9e76', margin: 0, padding: '16px 18px' }}>
@@ -1571,7 +1766,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     </div>
                   </div>
 
-                  {/* Your Next Challenge with Practice Again Button (Requirement 5) */}
+                  {/* 3. Your Next Challenge with Practice Again Button (Requirement 5) */}
                   <div
                     className="callout"
                     style={{
@@ -1604,7 +1799,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                         )}
                       </div>
 
-                      {/* Clear Practice Again Action (Requirement 5) */}
+                      {/* Clear Practice Again Action */}
                       <div>
                         <button
                           type="button"
@@ -1618,7 +1813,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     </div>
                   </div>
 
-                  {/* Core Meaning Preserved Audit */}
+                  {/* 4. Core Meaning Preserved Audit */}
                   <div
                     className="callout"
                     style={{
@@ -1636,24 +1831,114 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     </p>
                   </div>
 
-                  {/* Side by side transcript comparison */}
-                  <div className="callout" style={{ margin: '16px 0', padding: '14px 18px' }}>
-                    <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>Attempt Progression Comparison</h3>
-                    <div className="quote" style={{ marginBottom: '8px', fontSize: '13px' }}>
-                      <strong>Baseline:</strong> “{answer1.slice(0, 140)}...”
-                    </div>
-                    {comparison.hasPractice2 && practice1Answer ? (
-                      <>
-                        <div className="quote" style={{ marginBottom: '8px', borderLeftColor: '#7153de', fontSize: '13px' }}>
-                          <strong>Practice 1:</strong> “{practice1Answer.slice(0, 140)}...”
+                  {/* 5. Accessible Expandable Full Matrix & Transcripts */}
+                  <div className="accordion-item" style={{ margin: '18px 0' }}>
+                    <button
+                      type="button"
+                      className="accordion-trigger"
+                      aria-expanded={showFullComparison}
+                      onClick={() => setShowFullComparison(prev => !prev)}
+                      style={{ background: '#fcfaff' }}
+                    >
+                      <span>📊 {showFullComparison ? 'Hide' : 'View'} Full Dimension Comparison & Transcripts ({comparison.multiAttemptRows?.length || 5} skills)</span>
+                      <span>{showFullComparison ? '▲' : '▼'}</span>
+                    </button>
+                    {showFullComparison && (
+                      <div className="accordion-body" style={{ padding: '16px 18px' }}>
+                        {/* Multidimensional Progress Summary Table */}
+                        <div style={{ margin: '0 0 16px', overflowX: 'auto', background: '#ffffff', border: '1px solid #ebe6f5', borderRadius: '14px', padding: '6px 12px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }} aria-label="Progress comparison between baseline and practice attempts">
+                            <thead>
+                              <tr style={{ borderBottom: '1.5px solid #ede7fb', color: '#68607c' }}>
+                                <th style={{ padding: '10px 8px', fontWeight: 700 }}>Skill</th>
+                                <th style={{ padding: '10px 8px', fontWeight: 700, textAlign: 'center' }}>Baseline</th>
+                                <th style={{ padding: '10px 8px', fontWeight: 700, textAlign: 'center' }}>Practice 1</th>
+                                {comparison.hasPractice2 && (
+                                  <th style={{ padding: '10px 8px', fontWeight: 700, textAlign: 'center' }}>Practice 2</th>
+                                )}
+                                <th style={{ padding: '10px 8px', fontWeight: 700, textAlign: 'right' }}>Trend</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(comparison.multiAttemptRows && comparison.multiAttemptRows.length > 0
+                                ? comparison.multiAttemptRows
+                                : Object.values(comparison.dimensions || {}).map(d => ({
+                                    skill:
+                                      d.dimension === 'goalEffectiveness'
+                                        ? `${goal} Quality`
+                                        : d.dimension === 'scenarioAlignment'
+                                        ? 'Scenario Alignment'
+                                        : d.dimension.charAt(0).toUpperCase() + d.dimension.slice(1),
+                                    baseline: d.originalScore,
+                                    practice1: d.revisedScore,
+                                    practice2: undefined,
+                                    trend: d.classification,
+                                    change: d.change,
+                                  }))
+                              ).map((row, idx, arr) => {
+                                const isImproved = row.trend === 'improved';
+                                const isDeclined = row.trend === 'declined';
+
+                                return (
+                                  <tr key={idx} style={{ borderBottom: idx === arr.length - 1 ? 'none' : '1px solid #f2edf9' }}>
+                                    <td style={{ padding: '10px 8px', fontWeight: 600, color: '#2d254b' }}>
+                                      {row.skill}
+                                    </td>
+                                    <td style={{ padding: '10px 8px', textAlign: 'center', color: '#7a718c', fontWeight: 600 }}>
+                                      {row.baseline}/5
+                                    </td>
+                                    <td style={{ padding: '10px 8px', textAlign: 'center', color: !comparison.hasPractice2 ? (isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#3f385c') : '#7a718c', fontWeight: 600 }}>
+                                      {row.practice1 !== undefined ? `${row.practice1}/5` : '—'}
+                                    </td>
+                                    {comparison.hasPractice2 && (
+                                      <td style={{ padding: '10px 8px', textAlign: 'center', color: isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#3f385c', fontWeight: 700 }}>
+                                        {row.practice2 !== undefined ? `${row.practice2}/5` : '—'}
+                                      </td>
+                                    )}
+                                    <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                                      <span
+                                        className="tag"
+                                        style={{
+                                          fontSize: '11px',
+                                          padding: '3px 8px',
+                                          borderRadius: '8px',
+                                          background: isImproved ? '#eaf8f2' : isDeclined ? '#fee2e2' : '#f1f0f5',
+                                          color: isImproved ? '#16654a' : isDeclined ? '#991b1b' : '#524b68',
+                                          fontWeight: 700,
+                                          display: 'inline-block',
+                                        }}
+                                      >
+                                        {isImproved ? `+${row.change > 0 ? row.change : 1} Improved` : isDeclined ? `${row.change < 0 ? row.change : -1} Declined` : 'Similar'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
-                        <div className="quote" style={{ borderLeftColor: '#1f9e76', fontSize: '13px' }}>
-                          <strong>Practice 2:</strong> “{answer2.slice(0, 140)}...”
+
+                        {/* Side by side transcript comparison */}
+                        <div style={{ padding: '12px 14px', background: '#faf9fe', borderRadius: '12px', border: '1px solid #ede7fb' }}>
+                          <h3 style={{ fontSize: '13.5px', margin: '0 0 8px', color: '#3f385c' }}>Attempt Progression Comparison</h3>
+                          <div className="quote" style={{ marginBottom: '8px', fontSize: '12.5px', background: '#ffffff' }}>
+                            <strong>Baseline:</strong> “{answer1.slice(0, 140)}...”
+                          </div>
+                          {comparison.hasPractice2 && practice1Answer ? (
+                            <>
+                              <div className="quote" style={{ marginBottom: '8px', borderLeftColor: '#7153de', fontSize: '12.5px', background: '#ffffff' }}>
+                                <strong>Practice 1:</strong> “{practice1Answer.slice(0, 140)}...”
+                              </div>
+                              <div className="quote" style={{ borderLeftColor: '#1f9e76', fontSize: '12.5px', background: '#ffffff' }}>
+                                <strong>Practice 2:</strong> “{answer2.slice(0, 140)}...”
+                              </div>
+                            </>
+                          ) : (
+                            <div className="quote" style={{ borderLeftColor: '#1f9e76', fontSize: '12.5px', background: '#ffffff' }}>
+                              <strong>Practice 1:</strong> “{answer2.slice(0, 140)}...”
+                            </div>
+                          )}
                         </div>
-                      </>
-                    ) : (
-                      <div className="quote" style={{ borderLeftColor: '#1f9e76', fontSize: '13px' }}>
-                        <strong>Practice 1:</strong> “{answer2.slice(0, 140)}...”
                       </div>
                     )}
                   </div>
