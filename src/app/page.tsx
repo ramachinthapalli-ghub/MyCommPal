@@ -1268,112 +1268,117 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
           })}
         </div>
 
-        {/* Practice Sessions Card (Shown ONLY when user has completed at least one practice session) */}
+        {/* Progress Streak Section (Shown ONLY when user has completed at least one practice session) */}
         {hasCompletedPracticeSession && (
-          <div className="sidebar-streak-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1b54' }}>
-                🔥 Practice Sessions
-              </span>
-              <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#7c3aed' }}>
-                {totalCompletedSessions} {totalCompletedSessions === 1 ? 'Session' : 'Sessions'}
-              </span>
+          <div style={{ marginTop: '14px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#7b7194', marginBottom: '6px', paddingLeft: '4px' }}>
+              Progress streak
             </div>
-
-            {/* Dynamic Target Guidance */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
-              <span className="tiny" style={{ color: '#7b7194' }}>
-                Target: <strong>{targetSessions} {targetSessions === 1 ? 'session' : 'sessions'}</strong> ({sessionDuration}m each)
-              </span>
-              <span className="tiny" style={{ color: totalCompletedSessions >= targetSessions ? '#059669' : '#6d28d9', fontWeight: 700 }}>
-                {totalCompletedSessions}/{targetSessions}
-              </span>
-            </div>
-
-            {/* Dynamic Progress Bar */}
-            <div style={{ background: '#ede7fb', borderRadius: '6px', height: '6px', overflow: 'hidden', margin: '4px 0 8px' }}>
-              <div
-                style={{
-                  width: `${progressPercent}%`,
-                  background: totalCompletedSessions >= targetSessions
-                    ? 'linear-gradient(90deg, #10b981, #059669)'
-                    : 'linear-gradient(90deg, #7c3aed, #4f46e5)',
-                  height: '100%',
-                  borderRadius: '6px',
-                  transition: 'width 0.4s ease',
-                }}
-              />
-            </div>
-
-            {/* Session Rep Badges (No days!) */}
-            <div className="sidebar-session-pills">
-              {Array.from({ length: targetSessions }).map((_, idx) => {
-                const isDone = idx < totalCompletedSessions;
-                return (
-                  <span key={idx} className={`sidebar-rep-pill ${isDone ? 'done' : ''}`}>
-                    <span>Rep {idx + 1}</span>
-                    <span>{isDone ? '✓' : '·'}</span>
-                  </span>
-                );
-              })}
-            </div>
-
-            <div className="tiny" style={{ color: '#554e66', margin: '4px 0 10px', fontSize: '11px' }}>
-              {totalCompletedSessions >= targetSessions
-                ? `🎉 Target reached! (${totalCompletedSessions} completed)`
-                : `🎯 ${remainingInTarget} more ${remainingInTarget === 1 ? 'session' : 'sessions'} to complete your ${targetSessions}-session goal`}
-            </div>
-
-            {/* Completed Sessions Display Under Streak Section */}
-            <div className="sidebar-completed-sessions">
-              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#3f355c', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Completed Practice Sessions</span>
-                <span className="tiny" style={{ color: '#7c3aed', fontWeight: 700 }}>{totalCompletedSessions}</span>
+            <div className="sidebar-streak-card" style={{ marginTop: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1b54' }}>
+                  🔥 Practice Sessions
+                </span>
+                <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#7c3aed' }}>
+                  {totalCompletedSessions} {totalCompletedSessions === 1 ? 'Session' : 'Sessions'}
+                </span>
               </div>
 
-              {/* If current session was just completed, show it */}
-              {comparison && (
-                <div className="sidebar-session-item" style={{ background: '#f5f3ff', borderColor: '#ded5ff' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '11px', color: '#4338ca' }}>
-                      Current · {assessment?.focus || 'Articulation'}
-                    </strong>
-                    <span className="tiny-badge improved">✓ Just completed</span>
-                  </div>
-                  <div className="tiny" style={{ color: '#554e66', marginTop: '2px' }}>
-                    Score lift: {assessment?.scores[assessment.focus] || 3}/5 → {comparison.focusAfter}/5
-                  </div>
-                </div>
-              )}
+              {/* Dynamic Target Guidance */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                <span className="tiny" style={{ color: '#7b7194' }}>
+                  Target: <strong>{targetSessions} {targetSessions === 1 ? 'session' : 'sessions'}</strong> ({sessionDuration}m each)
+                </span>
+                <span className="tiny" style={{ color: totalCompletedSessions >= targetSessions ? '#059669' : '#6d28d9', fontWeight: 700 }}>
+                  {totalCompletedSessions}/{targetSessions}
+                </span>
+              </div>
 
-              {/* Past Completed Sessions List */}
-              {completedPracticeHistory.slice(0, 3).map((s, idx) => (
-                <div key={s.id || idx} className="sidebar-session-item">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '11px', color: '#1e1633' }}>
-                      {s.goal || 'Practice'} · {s.focusSkill || 'Clarity'}
-                    </strong>
-                    {s.comparison?.verdict && (
-                      <span className={`tiny-badge ${s.comparison.verdict === 'improved' ? 'improved' : ''}`}>
-                        {s.comparison.verdict === 'improved' ? '✓ Improved' : 'Similar'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="tiny" style={{ color: '#7a718c', marginTop: '2px' }}>
-                    Score: {s.baselineScores?.[s.focusSkill as keyof Scores] || 3}/5 → {s.retryScores?.[s.focusSkill as keyof Scores] || s.comparison?.focusAfter || '4'}/5
-                  </div>
+              {/* Dynamic Progress Bar */}
+              <div style={{ background: '#ede7fb', borderRadius: '6px', height: '6px', overflow: 'hidden', margin: '4px 0 8px' }}>
+                <div
+                  style={{
+                    width: `${progressPercent}%`,
+                    background: totalCompletedSessions >= targetSessions
+                      ? 'linear-gradient(90deg, #10b981, #059669)'
+                      : 'linear-gradient(90deg, #7c3aed, #4f46e5)',
+                    height: '100%',
+                    borderRadius: '6px',
+                    transition: 'width 0.4s ease',
+                  }}
+                />
+              </div>
+
+              {/* Session Rep Badges (No days!) */}
+              <div className="sidebar-session-pills">
+                {Array.from({ length: targetSessions }).map((_, idx) => {
+                  const isDone = idx < totalCompletedSessions;
+                  return (
+                    <span key={idx} className={`sidebar-rep-pill ${isDone ? 'done' : ''}`}>
+                      <span>Rep {idx + 1}</span>
+                      <span>{isDone ? '✓' : '·'}</span>
+                    </span>
+                  );
+                })}
+              </div>
+
+              <div className="tiny" style={{ color: '#554e66', margin: '4px 0 10px', fontSize: '11px' }}>
+                {totalCompletedSessions >= targetSessions
+                  ? `🎉 Target reached! (${totalCompletedSessions} completed)`
+                  : `🎯 ${remainingInTarget} more ${remainingInTarget === 1 ? 'session' : 'sessions'} to complete your ${targetSessions}-session goal`}
+              </div>
+
+              {/* Completed Sessions Display Under Streak Section */}
+              <div className="sidebar-completed-sessions">
+                <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#3f355c', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Completed Practice Sessions</span>
+                  <span className="tiny" style={{ color: '#7c3aed', fontWeight: 700 }}>{totalCompletedSessions}</span>
                 </div>
-              ))}
+
+                {/* If current session was just completed, show it */}
+                {comparison && (
+                  <div className="sidebar-session-item" style={{ background: '#f5f3ff', borderColor: '#ded5ff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '11px', color: '#4338ca' }}>
+                        Current · {assessment?.focus || 'Articulation'}
+                      </strong>
+                      <span className="tiny-badge improved">✓ Just completed</span>
+                    </div>
+                    <div className="tiny" style={{ color: '#554e66', marginTop: '2px' }}>
+                      Score lift: {assessment?.scores[assessment.focus] || 3}/5 → {comparison.focusAfter}/5
+                    </div>
+                  </div>
+                )}
+
+                {/* Past Completed Sessions List */}
+                {completedPracticeHistory.slice(0, 3).map((s, idx) => (
+                  <div key={s.id || idx} className="sidebar-session-item">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '11px', color: '#1e1633' }}>
+                        {s.goal || 'Practice'} · {s.focusSkill || 'Clarity'}
+                      </strong>
+                      {s.comparison?.verdict && (
+                        <span className={`tiny-badge ${s.comparison.verdict === 'improved' ? 'improved' : ''}`}>
+                          {s.comparison.verdict === 'improved' ? '✓ Improved' : 'Similar'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="tiny" style={{ color: '#7a718c', marginTop: '2px' }}>
+                      Score: {s.baselineScores?.[s.focusSkill as keyof Scores] || 3}/5 → {s.retryScores?.[s.focusSkill as keyof Scores] || s.comparison?.focusAfter || '4'}/5
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="btn ghost"
+                style={{ width: '100%', padding: '6px 0', fontSize: '11px', color: '#6d28d9', textAlign: 'center', marginTop: '8px' }}
+                onClick={loadHistory}
+              >
+                📜 View Full Practice History ({totalCompletedSessions})
+              </button>
             </div>
-
-            <button
-              type="button"
-              className="btn ghost"
-              style={{ width: '100%', padding: '6px 0', fontSize: '11px', color: '#6d28d9', textAlign: 'center', marginTop: '8px' }}
-              onClick={loadHistory}
-            >
-              📜 View Full Practice History ({totalCompletedSessions})
-            </button>
           </div>
         )}
 
@@ -1394,12 +1399,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
       <main className="main">
         {/* Top Header Bar */}
         <div className="top">
-          <div className="top-branding">
-            <span className="brand-pill">🎯 MyCommPal</span>
-            <span className="tagline">
-              AI Communication Coach for Product Managers · Turn unstructured thoughts into executive recommendations
-            </span>
-          </div>
+          <span className="eyebrow">PRACTICE WITH VIRA · SPEAK WITH IMPACT</span>
           <div className="top-actions">
             {user && (
               <>
@@ -1426,31 +1426,6 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 Meet Vira, your personal AI communication mentor. Practice realistic product management conversations,
                 get targeted feedback, and strengthen your articulation one session at a time.
               </p>
-
-              {/* Clear 3-Pillar Value Proposition */}
-              <div className="how-it-works-strip">
-                <div className="how-it-works-card">
-                  <span className="how-icon">🎙️</span>
-                  <div>
-                    <strong>1. Realistic PM Scenarios</strong>
-                    <p>Practice high-stakes pushback, trade-offs, roadmap delays, or your own upcoming meeting.</p>
-                  </div>
-                </div>
-                <div className="how-it-works-card">
-                  <span className="how-icon">👩‍💼</span>
-                  <div>
-                    <strong>2. Calibrated Feedback</strong>
-                    <p>Instant scoring on Clarity, Structure, Conciseness, Decision Logic & Trade-off articulation.</p>
-                  </div>
-                </div>
-                <div className="how-it-works-card">
-                  <span className="how-icon">📈</span>
-                  <div>
-                    <strong>3. Guided Rehearsal</strong>
-                    <p>Apply calibrated PM frameworks (DETI, PREP) and measure before/after score lift.</p>
-                  </div>
-                </div>
-              </div>
 
               <div className="vira">
                 <span className="avatar">👩‍💼</span>
