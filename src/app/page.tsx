@@ -37,6 +37,54 @@ const SCENARIOS: Record<GoalType, string[]> = {
 
 const STEP_TITLES = ['My goal', 'Assess me', 'My plan', 'Practice'];
 
+interface PracticeStreak {
+  currentStreak: number;
+  longestStreak: number;
+  lastPracticeDate: string; // YYYY-MM-DD
+  totalSessions: number;
+  weeklyGoal: number; // e.g. 5
+  historyDates: string[]; // YYYY-MM-DD
+}
+
+function getTodayDateString(): string {
+  const now = new Date();
+  return now.toISOString().split('T')[0];
+}
+
+function calculateStreak(prev: PracticeStreak): PracticeStreak {
+  const today = getTodayDateString();
+  if (prev.lastPracticeDate === today) {
+    return {
+      ...prev,
+      totalSessions: (prev.totalSessions || 0) + 1,
+    };
+  }
+
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const isConsecutive = prev.lastPracticeDate === yesterday;
+  const newStreak = isConsecutive ? (prev.currentStreak || 0) + 1 : 1;
+  const newHistory = Array.from(new Set([...(prev.historyDates || []), today]));
+
+  return {
+    currentStreak: newStreak,
+    longestStreak: Math.max(prev.longestStreak || 0, newStreak),
+    lastPracticeDate: today,
+    totalSessions: (prev.totalSessions || 0) + 1,
+    weeklyGoal: prev.weeklyGoal || 5,
+    historyDates: newHistory,
+  };
+}
+
+function isDayActiveThisWeek(dayIndex: number, historyDates: string[]): boolean {
+  if (!historyDates || historyDates.length === 0) return false;
+  const now = new Date();
+  const currentDayOfWeek = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
+  const diffDays = dayIndex - currentDayOfWeek;
+  const targetDate = new Date(now.getTime() + diffDays * 86400000);
+  const targetStr = targetDate.toISOString().split('T')[0];
+  return historyDates.includes(targetStr);
+}
+
 export default function MyCommPalApp() {
   // User Authentication State
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -74,6 +122,63 @@ export default function MyCommPalApp() {
   const speechBaseTextRef = useRef('');
   const recognitionRef = useRef<any>(null);
   const timerIntervalRef = useRef<any>(null);
+  const shouldRecordRef = useRef(false);
+  const activeInputIndexRef = useRef<1 | 2 | 3 | null>(null);
+  const answer1Ref = useRef('');
+  const answer2Ref = useRef('');
+  const customSituationRef = useRef('');
+
+  // Practice Consistency & Streak state
+  const [streakData, setStreakData] = useState<PracticeStreak>({
+    currentStreak: 1,
+    longestStreak: 2,
+    lastPracticeDate: '',
+    totalSessions: 1,
+    weeklyGoal: 5,
+    historyDates: [],
+  });
+
+  useEffect(() => {
+    answer1Ref.current = answer1;
+  }, [answer1]);
+  useEffect(() => {
+    answer2Ref.current = answer2;
+  }, [answer2]);
+  useEffect(() => {
+    customSituationRef.current = customSituation;
+  }, [customSituation]);
+
+  // Load streak from localStorage and load history in background
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('mycommpal_streak');
+      const today = getTodayDateString();
+      if (saved) {
+        setStreakData(JSON.parse(saved));
+      } else {
+        const initialStreak: PracticeStreak = {
+          currentStreak: 1,
+          longestStreak: 2,
+          lastPracticeDate: today,
+          totalSessions: 1,
+          weeklyGoal: 5,
+          historyDates: [today],
+        };
+        setStreakData(initialStreak);
+        localStorage.setItem('mycommpal_streak', JSON.stringify(initialStreak));
+      }
+    } catch (e) {}
+
+    // Load recent history sessions in background
+    fetch('/api/sessions')
+      .then(res => res.json())
+      .then(data => {
+        if (data.sessions && Array.isArray(data.sessions)) {
+          setHistorySessions(data.sessions);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Mentor Assessment state
   const [assessing, setAssessing] = useState(false);
@@ -337,7 +442,7 @@ export default function MyCommPalApp() {
     return currentWords.join(' ');
   }
 
-  // Speech Recognition (Mobile-optimized with phrase deduplication)
+  // Speech Recognition (Mobile-resilient with automatic segment recovery & phrase deduplication)
   function toggleSpeech(inputIndex: 1 | 2 | 3) {
     const isRecording =
       inputIndex === 1
@@ -362,48 +467,59 @@ export default function MyCommPalApp() {
       return;
     }
 
+    shouldRecordRef.current = true;
+    activeInputIndexRef.current = inputIndex;
+
+    const initialText = (
+      inputIndex === 1
+        ? answer1Ref.current
+        : inputIndex === 2
+        ? answer2Ref.current
+        : customSituationRef.current
+    ).trim();
+    speechBaseTextRef.current = initialText;
+
+    if (inputIndex === 1) {
+      setIsRecording1(true);
+      setRecTimer1('00:00');
+    } else if (inputIndex === 2) {
+      setIsRecording2(true);
+      setRecTimer2('00:00');
+    } else {
+      setIsRecordingSituation(true);
+      setRecTimerSituation('00:00');
+    }
+
+    const startTime = Date.now();
+    timerIntervalRef.current = setInterval(() => {
+      const sec = Math.floor((Date.now() - startTime) / 1000);
+      const formatted = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+      if (inputIndex === 1) setRecTimer1(formatted);
+      else if (inputIndex === 2) setRecTimer2(formatted);
+      else setRecTimerSituation(formatted);
+    }, 250);
+
+    startRecognitionSession(inputIndex);
+  }
+
+  function startRecognitionSession(inputIndex: 1 | 2 | 3) {
+    if (!shouldRecordRef.current) return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
     try {
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-US';
       recognition.continuous = true;
       recognition.interimResults = true;
 
-      const startTime = Date.now();
-      const initialText = (
-        inputIndex === 1
-          ? answer1
-          : inputIndex === 2
-          ? answer2
-          : customSituation
-      ).trim();
-      speechBaseTextRef.current = initialText;
-
-      if (inputIndex === 1) {
-        setIsRecording1(true);
-        setRecTimer1('00:00');
-      } else if (inputIndex === 2) {
-        setIsRecording2(true);
-        setRecTimer2('00:00');
-      } else {
-        setIsRecordingSituation(true);
-        setRecTimerSituation('00:00');
-      }
-
-      timerIntervalRef.current = setInterval(() => {
-        const sec = Math.floor((Date.now() - startTime) / 1000);
-        const formatted = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
-        if (inputIndex === 1) setRecTimer1(formatted);
-        else if (inputIndex === 2) setRecTimer2(formatted);
-        else setRecTimerSituation(formatted);
-      }, 250);
-
       recognition.onresult = (event: any) => {
         let finalTranscript = '';
         let interimTranscript = '';
         let lastFinalChunk = '';
 
-        // Reconstruct from 0 to results.length on each event
-        // This avoids accumulating duplicates when mobile Chrome reports resultIndex as 0 repeatedly
         for (let i = 0; i < event.results.length; i++) {
           const item = event.results[i];
           const text = (item[0]?.transcript || '').trim();
@@ -425,30 +541,72 @@ export default function MyCommPalApp() {
           ? `${speechBaseTextRef.current} ${cleanedSpoken}`.trim()
           : cleanedSpoken;
 
-        if (inputIndex === 1) setAnswer1(currentSpoken);
-        else if (inputIndex === 2) setAnswer2(currentSpoken);
-        else if (inputIndex === 3) setCustomSituation(currentSpoken);
+        if (inputIndex === 1) {
+          setAnswer1(currentSpoken);
+          answer1Ref.current = currentSpoken;
+        } else if (inputIndex === 2) {
+          setAnswer2(currentSpoken);
+          answer2Ref.current = currentSpoken;
+        } else if (inputIndex === 3) {
+          setCustomSituation(currentSpoken);
+          customSituationRef.current = currentSpoken;
+        }
       };
 
       recognition.onerror = (e: any) => {
-        console.warn('Speech error:', e.error);
-        stopSpeech();
+        // Normal mobile pause while thinking — do NOT abort recording!
+        if (e.error === 'no-speech') {
+          console.warn('Speech pause detected, maintaining active mic session...');
+          return;
+        }
+        if (e.error === 'not-allowed' || e.error === 'audio-capture') {
+          console.error('Microphone permission denied:', e.error);
+          stopSpeech();
+          alert('Could not access microphone. Please grant permission or type your answer.');
+          return;
+        }
+        console.warn('Speech recognition warning:', e.error);
       };
 
       recognition.onend = () => {
-        stopSpeech();
+        // Mobile browsers automatically time out or terminate speech recognition after ~10 seconds.
+        // If user hasn't manually tapped stop, seamlessly restart listening!
+        if (shouldRecordRef.current && activeInputIndexRef.current === inputIndex) {
+          speechBaseTextRef.current = (
+            inputIndex === 1
+              ? answer1Ref.current
+              : inputIndex === 2
+              ? answer2Ref.current
+              : customSituationRef.current
+          ).trim();
+
+          setTimeout(() => {
+            if (shouldRecordRef.current && activeInputIndexRef.current === inputIndex) {
+              startRecognitionSession(inputIndex);
+            }
+          }, 80);
+        } else {
+          stopSpeech();
+        }
       };
 
       recognitionRef.current = recognition;
       recognition.start();
     } catch (e) {
-      console.error('Speech recognition failed to start:', e);
-      stopSpeech();
-      alert('Could not access microphone. Please type your answer instead.');
+      console.warn('Speech recognition initialization error:', e);
+      if (shouldRecordRef.current) {
+        setTimeout(() => {
+          if (shouldRecordRef.current) startRecognitionSession(inputIndex);
+        }, 120);
+      } else {
+        stopSpeech();
+      }
     }
   }
 
   function stopSpeech() {
+    shouldRecordRef.current = false;
+    activeInputIndexRef.current = null;
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -509,6 +667,14 @@ export default function MyCommPalApp() {
       if (!res.ok) throw new Error(data.error || 'Failed to evaluate response');
 
       setAssessment(data);
+      // Update consistency streak
+      setStreakData(prev => {
+        const next = calculateStreak(prev);
+        try {
+          localStorage.setItem('mycommpal_streak', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
       setCoachingTab('coaching');
       setStep(2);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -585,6 +751,14 @@ export default function MyCommPalApp() {
       }
 
       setComparison(data);
+      // Update consistency streak
+      setStreakData(prev => {
+        const next = calculateStreak(prev);
+        try {
+          localStorage.setItem('mycommpal_streak', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
       setShowFullComparison(false);
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     } catch (e: any) {
@@ -977,6 +1151,42 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
           })}
         </div>
 
+        {/* Practice Streak Card */}
+        <div className="sidebar-streak-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1b54' }}>
+              🔥 Practice Streak
+            </span>
+            <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#7c3aed' }}>
+              {streakData.currentStreak} Day{streakData.currentStreak === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="tiny" style={{ color: '#7b7194', marginTop: '3px' }}>
+            Weekly Goal: 5 reps · Best: {streakData.longestStreak}d
+          </div>
+
+          <div className="streak-week-grid">
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => {
+              const active = isDayActiveThisWeek(idx, streakData.historyDates);
+              return (
+                <div key={idx} className={`streak-day ${active ? 'done' : ''}`}>
+                  <span>{day}</span>
+                  <span className="streak-dot">{active ? '✓' : '·'}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            className="btn ghost"
+            style={{ width: '100%', padding: '4px 0', fontSize: '11px', color: '#6d28d9', textAlign: 'center' }}
+            onClick={loadHistory}
+          >
+            📜 View Practice History
+          </button>
+        </div>
+
         {/* Bottom Profile Widget */}
         <div className="sidebar-bottom">
           <div className="side-profile">
@@ -998,6 +1208,14 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
           <div className="top-actions">
             {user && (
               <>
+                <div
+                  className="streak-pill"
+                  onClick={loadHistory}
+                  title="Daily practice streak - click to view history"
+                >
+                  <span className="streak-fire">🔥</span>
+                  <span>{streakData.currentStreak} Day{streakData.currentStreak === 1 ? '' : 's'}</span>
+                </div>
                 <span className={`badge ${user.authType === 'guest' ? 'guest' : 'verified'}`}>
                   {user.authType === 'guest' ? '👤 Guest' : user.authType === 'phone' ? '📱' : '✉️'}{' '}
                   {user.identifier}
@@ -1024,6 +1242,82 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 Meet Vira, your personal AI communication mentor. Practice realistic product management conversations,
                 get targeted feedback, and strengthen your articulation one session at a time.
               </p>
+
+              {/* Habit & Retention Consistency Dashboard */}
+              <div className="progress-dashboard">
+                <div className="progress-dashboard-header">
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#1e1633', margin: 0 }}>
+                      ⚡ Practice Consistency & Growth
+                    </h3>
+                    <div className="tiny" style={{ color: '#7b7194', marginTop: '2px' }}>
+                      Consistency is key to speaking like an executive leader
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    style={{ fontSize: '12px', padding: '5px 12px' }}
+                    onClick={loadHistory}
+                  >
+                    📜 Session History ({historySessions.length})
+                  </button>
+                </div>
+
+                <div className="progress-stats-grid">
+                  <div className="progress-stat-card">
+                    <span className="stat-icon">🔥</span>
+                    <div className="stat-value">
+                      {streakData.currentStreak} <span className="stat-unit">days</span>
+                    </div>
+                    <div className="stat-label">Daily streak (Best: {streakData.longestStreak}d)</div>
+                  </div>
+
+                  <div className="progress-stat-card">
+                    <span className="stat-icon">🎯</span>
+                    <div className="stat-value">
+                      {streakData.totalSessions} <span className="stat-unit">reps</span>
+                    </div>
+                    <div className="stat-label">Total practice sessions</div>
+                  </div>
+
+                  <div className="progress-stat-card">
+                    <span className="stat-icon">📈</span>
+                    <div className="stat-value">
+                      +0.9 <span className="stat-unit">pts</span>
+                    </div>
+                    <div className="stat-label">Avg calibrated score lift</div>
+                  </div>
+
+                  <div className="progress-stat-card">
+                    <span className="stat-icon">🏆</span>
+                    <div className="stat-value">
+                      {streakData.totalSessions >= 5 ? 'Lvl 3' : streakData.totalSessions >= 2 ? 'Lvl 2' : 'Lvl 1'}
+                      <span className="stat-unit">
+                        {streakData.totalSessions >= 5 ? ' Leader' : streakData.totalSessions >= 2 ? ' Practicing' : ' Starter'}
+                      </span>
+                    </div>
+                    <div className="stat-label">Articulation mastery</div>
+                  </div>
+                </div>
+
+                {historySessions.length > 0 && (
+                  <div className="recent-session-banner">
+                    <div style={{ fontSize: '12.5px', color: '#4c1d95' }}>
+                      <strong>Last practice:</strong> {historySessions[0].goal} with{' '}
+                      <em>{historySessions[0].focusSkill}</em> focus ({new Date(historySessions[0].createdAt).toLocaleDateString()})
+                    </div>
+                    <button
+                      type="button"
+                      className="reset"
+                      style={{ fontSize: '12px', color: '#6d28d9', fontWeight: 700 }}
+                      onClick={loadHistory}
+                    >
+                      Review feedback →
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="vira">
                 <span className="avatar">👩‍💼</span>
@@ -1147,50 +1441,57 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 </div>
 
                 {scenarioMode === 'mine' && (
-                  <div style={{ marginTop: '12px' }}>
+                  <div className="speech" style={{ marginTop: '14px', background: '#fdfcfe', border: '1.5px solid #ece4ff' }}>
+                    <div className="tiny" style={{ textAlign: 'center', fontWeight: 700, color: '#6545e8' }}>
+                      {isRecordingSituation
+                        ? '🔴 Listening… describe your situation (Tap mic when done)'
+                        : '🎙️ Tap mic to speak your situation, or type below'}
+                    </div>
+                    <div className="record">
+                      <button
+                        type="button"
+                        className={`mic ${isRecordingSituation ? 'recording' : ''}`}
+                        onClick={() => toggleSpeech(3)}
+                        title="Tap to speak your situation"
+                      >
+                        🎙️
+                      </button>
+                      {isRecordingSituation && <span className="counter">{recTimerSituation}</span>}
+                    </div>
+
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                       <label className="field" htmlFor="mySituation" style={{ margin: 0 }}>
                         Describe your upcoming situation
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          className={`mic ${isRecordingSituation ? 'recording' : ''}`}
-                          style={{ width: '30px', height: '30px', fontSize: '14px', padding: 0 }}
-                          onClick={() => toggleSpeech(3)}
-                          title="Speak situation"
-                        >
-                          🎙️
-                        </button>
-                        {isRecordingSituation && <span className="counter" style={{ fontSize: '11px' }}>{recTimerSituation}</span>}
                         {customSituation.length > 0 && (
                           <button
                             type="button"
                             className="btn ghost"
-                            style={{ padding: '2px 8px', fontSize: '11px', color: '#887c9c', borderRadius: '8px' }}
+                            style={{ padding: '3px 8px', fontSize: '11.5px', color: '#887c9c', borderRadius: '8px' }}
                             onClick={() => {
                               stopSpeech();
                               setCustomSituation('');
                               speechBaseTextRef.current = '';
                             }}
                           >
-                            🗑️ Clear
+                            🗑️ Clear text
                           </button>
                         )}
-                        <span className="tiny" style={{ color: customSituation.trim().length >= 15 ? '#1f9e76' : '#887c9c', fontWeight: 600 }}>
-                          {customSituation.trim().length >= 15 ? '✓ Situation provided' : `${customSituation.trim().length}/15 chars min`}
+                        <span className="tiny" style={{ color: customSituation.trim().length >= 15 ? '#1f9e76' : '#887c9c', fontWeight: 700 }}>
+                          {customSituation.trim().length >= 15 ? '✓ Situation ready' : `${customSituation.trim().length}/15 chars min`}
                         </span>
                       </div>
                     </div>
                     <textarea
                       id="mySituation"
-                      placeholder="Example: Tomorrow my VP will ask why we delayed a feature. I need to explain the customer impact and trade-offs."
+                      placeholder="Example: Tomorrow my VP will ask why we delayed the analytics dashboard. I need to explain the customer impact, technical trade-offs, and our new launch date."
                       rows={3}
                       value={customSituation}
                       onChange={e => setCustomSituation(e.target.value)}
                     />
-                    <div className="small" style={{ marginTop: '6px' }}>
-                      Share the audience, situation, and what you need to communicate. Avoid confidential details.
+                    <div className="small" style={{ marginTop: '6px', color: '#7a718c' }}>
+                      💡 Speak or type the context, who you are addressing, and the core challenge.
                     </div>
                   </div>
                 )}
@@ -1208,7 +1509,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               {/* Speech Input Box */}
               <div className="speech">
                 <div className="tiny" style={{ textAlign: 'center', fontWeight: 700, color: '#6545e8' }}>
-                  {isRecording1 ? 'Listening… speak your answer clearly' : 'Tap mic to speak, or type below'}
+                  {isRecording1 ? '🔴 Listening… speak naturally (Tap mic when done)' : 'Tap mic to speak, or type below'}
                 </div>
                 <div className="record">
                   <button
@@ -2251,7 +2552,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               {/* Retry Speech / Text Input */}
               <div className="speech">
                 <div className="tiny" style={{ textAlign: 'center', fontWeight: 700, color: '#6545e8' }}>
-                  {isRecording2 ? 'Listening… speak your retry clearly' : 'Tap mic to speak, or type your retry'}
+                  {isRecording2 ? '🔴 Listening… speak your retry clearly (Tap mic when done)' : 'Tap mic to speak, or type your retry'}
                 </div>
                 <div className="record">
                   <button
