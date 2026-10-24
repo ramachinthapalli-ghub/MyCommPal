@@ -974,9 +974,14 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
 
                 {scenarioMode === 'mine' && (
                   <div style={{ marginTop: '12px' }}>
-                    <label className="field" htmlFor="mySituation">
-                      Describe your upcoming situation
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label className="field" htmlFor="mySituation" style={{ margin: 0 }}>
+                        Describe your upcoming situation
+                      </label>
+                      <span className="tiny" style={{ color: customSituation.trim().length >= 15 ? '#1f9e76' : '#887c9c', fontWeight: 600 }}>
+                        {customSituation.trim().length >= 15 ? '✓ Situation provided' : `${customSituation.trim().length}/15 chars min`}
+                      </span>
+                    </div>
                     <textarea
                       id="mySituation"
                       placeholder="Example: Tomorrow my VP will ask why we delayed a feature. I need to explain the customer impact and trade-offs."
@@ -1026,8 +1031,17 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   value={answer1}
                   onChange={e => setAnswer1(e.target.value)}
                 />
-                <div className="small" style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                <div className="small" style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                   <span>{answer1.length} characters (min 35)</span>
+                  {scenarioMode === 'mine' && (
+                    <span style={{ color: customSituation.trim().length >= 15 && answer1.trim().length >= 35 ? '#1f9e76' : '#887c9c', fontWeight: 600 }}>
+                      {customSituation.trim().length < 15
+                        ? 'Describe your situation above to enable feedback'
+                        : answer1.trim().length < 35
+                        ? 'Enter baseline response to enable feedback'
+                        : '✓ Ready to get Vira’s feedback'}
+                    </span>
+                  )}
                   {scenarioMode === 'vira' && (
                     <button
                       type="button"
@@ -1043,7 +1057,11 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               <div className="actions">
                 <button
                   className="btn"
-                  disabled={assessing || answer1.trim().length < 35}
+                  disabled={
+                    assessing ||
+                    answer1.trim().length < 35 ||
+                    (scenarioMode === 'mine' && customSituation.trim().length < 15)
+                  }
                   onClick={handleAssess}
                 >
                   {assessing ? (
