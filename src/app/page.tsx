@@ -130,10 +130,10 @@ export default function MyCommPalApp() {
 
   // Practice Consistency & Streak state
   const [streakData, setStreakData] = useState<PracticeStreak>({
-    currentStreak: 1,
-    longestStreak: 2,
+    currentStreak: 0,
+    longestStreak: 0,
     lastPracticeDate: '',
-    totalSessions: 1,
+    totalSessions: 0,
     weeklyGoal: 5,
     historyDates: [],
   });
@@ -152,20 +152,9 @@ export default function MyCommPalApp() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('mycommpal_streak');
-      const today = getTodayDateString();
       if (saved) {
-        setStreakData(JSON.parse(saved));
-      } else {
-        const initialStreak: PracticeStreak = {
-          currentStreak: 1,
-          longestStreak: 2,
-          lastPracticeDate: today,
-          totalSessions: 1,
-          weeklyGoal: 5,
-          historyDates: [today],
-        };
-        setStreakData(initialStreak);
-        localStorage.setItem('mycommpal_streak', JSON.stringify(initialStreak));
+        const parsed = JSON.parse(saved);
+        if (parsed) setStreakData(parsed);
       }
     } catch (e) {}
 
@@ -175,6 +164,14 @@ export default function MyCommPalApp() {
       .then(data => {
         if (data.sessions && Array.isArray(data.sessions)) {
           setHistorySessions(data.sessions);
+          if (data.sessions.length > 0) {
+            setStreakData(prev => ({
+              ...prev,
+              totalSessions: Math.max(prev.totalSessions || 0, data.sessions.length),
+              currentStreak: Math.max(prev.currentStreak || 0, 1),
+              longestStreak: Math.max(prev.longestStreak || 0, 1),
+            }));
+          }
         }
       })
       .catch(() => {});
@@ -1111,6 +1108,9 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
   // =========================================================================
   // VIEW 2: AUTHENTICATED APP (Full 4-Screen HTML Prototype Flow)
   // =========================================================================
+  const hasCompletedSession =
+    (streakData.totalSessions || 0) > 0 || (historySessions && historySessions.length > 0);
+
   return (
     <div className="shell">
       {/* Sidebar Navigation */}
@@ -1151,41 +1151,43 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
           })}
         </div>
 
-        {/* Practice Streak Card */}
-        <div className="sidebar-streak-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1b54' }}>
-              🔥 Practice Streak
-            </span>
-            <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#7c3aed' }}>
-              {streakData.currentStreak} Day{streakData.currentStreak === 1 ? '' : 's'}
-            </span>
-          </div>
-          <div className="tiny" style={{ color: '#7b7194', marginTop: '3px' }}>
-            Weekly Goal: 5 reps · Best: {streakData.longestStreak}d
-          </div>
+        {/* Practice Streak Card (Shown only when at least one session is completed) */}
+        {hasCompletedSession && (
+          <div className="sidebar-streak-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1b54' }}>
+                🔥 Practice Streak
+              </span>
+              <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#7c3aed' }}>
+                {streakData.currentStreak} Day{streakData.currentStreak === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="tiny" style={{ color: '#7b7194', marginTop: '3px' }}>
+              Weekly Goal: 5 reps · Best: {streakData.longestStreak}d
+            </div>
 
-          <div className="streak-week-grid">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => {
-              const active = isDayActiveThisWeek(idx, streakData.historyDates);
-              return (
-                <div key={idx} className={`streak-day ${active ? 'done' : ''}`}>
-                  <span>{day}</span>
-                  <span className="streak-dot">{active ? '✓' : '·'}</span>
-                </div>
-              );
-            })}
-          </div>
+            <div className="streak-week-grid">
+              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => {
+                const active = isDayActiveThisWeek(idx, streakData.historyDates);
+                return (
+                  <div key={idx} className={`streak-day ${active ? 'done' : ''}`}>
+                    <span>{day}</span>
+                    <span className="streak-dot">{active ? '✓' : '·'}</span>
+                  </div>
+                );
+              })}
+            </div>
 
-          <button
-            type="button"
-            className="btn ghost"
-            style={{ width: '100%', padding: '4px 0', fontSize: '11px', color: '#6d28d9', textAlign: 'center' }}
-            onClick={loadHistory}
-          >
-            📜 View Practice History
-          </button>
-        </div>
+            <button
+              type="button"
+              className="btn ghost"
+              style={{ width: '100%', padding: '4px 0', fontSize: '11px', color: '#6d28d9', textAlign: 'center' }}
+              onClick={loadHistory}
+            >
+              📜 View Practice History
+            </button>
+          </div>
+        )}
 
         {/* Bottom Profile Widget */}
         <div className="sidebar-bottom">
@@ -1208,21 +1210,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
           <div className="top-actions">
             {user && (
               <>
-                <div
-                  className="streak-pill"
-                  onClick={loadHistory}
-                  title="Daily practice streak - click to view history"
-                >
-                  <span className="streak-fire">🔥</span>
-                  <span>{streakData.currentStreak} Day{streakData.currentStreak === 1 ? '' : 's'}</span>
-                </div>
                 <span className={`badge ${user.authType === 'guest' ? 'guest' : 'verified'}`}>
                   {user.authType === 'guest' ? '👤 Guest' : user.authType === 'phone' ? '📱' : '✉️'}{' '}
                   {user.identifier}
                 </span>
-                <button className="btn ghost" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={loadHistory}>
-                  📜 History
-                </button>
                 <button className="btn ghost" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={handleLogout}>
                   Sign out
                 </button>
@@ -1242,82 +1233,6 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 Meet Vira, your personal AI communication mentor. Practice realistic product management conversations,
                 get targeted feedback, and strengthen your articulation one session at a time.
               </p>
-
-              {/* Habit & Retention Consistency Dashboard */}
-              <div className="progress-dashboard">
-                <div className="progress-dashboard-header">
-                  <div>
-                    <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#1e1633', margin: 0 }}>
-                      ⚡ Practice Consistency & Growth
-                    </h3>
-                    <div className="tiny" style={{ color: '#7b7194', marginTop: '2px' }}>
-                      Consistency is key to speaking like an executive leader
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn ghost"
-                    style={{ fontSize: '12px', padding: '5px 12px' }}
-                    onClick={loadHistory}
-                  >
-                    📜 Session History ({historySessions.length})
-                  </button>
-                </div>
-
-                <div className="progress-stats-grid">
-                  <div className="progress-stat-card">
-                    <span className="stat-icon">🔥</span>
-                    <div className="stat-value">
-                      {streakData.currentStreak} <span className="stat-unit">days</span>
-                    </div>
-                    <div className="stat-label">Daily streak (Best: {streakData.longestStreak}d)</div>
-                  </div>
-
-                  <div className="progress-stat-card">
-                    <span className="stat-icon">🎯</span>
-                    <div className="stat-value">
-                      {streakData.totalSessions} <span className="stat-unit">reps</span>
-                    </div>
-                    <div className="stat-label">Total practice sessions</div>
-                  </div>
-
-                  <div className="progress-stat-card">
-                    <span className="stat-icon">📈</span>
-                    <div className="stat-value">
-                      +0.9 <span className="stat-unit">pts</span>
-                    </div>
-                    <div className="stat-label">Avg calibrated score lift</div>
-                  </div>
-
-                  <div className="progress-stat-card">
-                    <span className="stat-icon">🏆</span>
-                    <div className="stat-value">
-                      {streakData.totalSessions >= 5 ? 'Lvl 3' : streakData.totalSessions >= 2 ? 'Lvl 2' : 'Lvl 1'}
-                      <span className="stat-unit">
-                        {streakData.totalSessions >= 5 ? ' Leader' : streakData.totalSessions >= 2 ? ' Practicing' : ' Starter'}
-                      </span>
-                    </div>
-                    <div className="stat-label">Articulation mastery</div>
-                  </div>
-                </div>
-
-                {historySessions.length > 0 && (
-                  <div className="recent-session-banner">
-                    <div style={{ fontSize: '12.5px', color: '#4c1d95' }}>
-                      <strong>Last practice:</strong> {historySessions[0].goal} with{' '}
-                      <em>{historySessions[0].focusSkill}</em> focus ({new Date(historySessions[0].createdAt).toLocaleDateString()})
-                    </div>
-                    <button
-                      type="button"
-                      className="reset"
-                      style={{ fontSize: '12px', color: '#6d28d9', fontWeight: 700 }}
-                      onClick={loadHistory}
-                    >
-                      Review feedback →
-                    </button>
-                  </div>
-                )}
-              </div>
 
               <div className="vira">
                 <span className="avatar">👩‍💼</span>
