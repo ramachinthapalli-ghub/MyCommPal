@@ -128,13 +128,31 @@ export default function MyCommPalApp() {
   const answer2Ref = useRef('');
   const customSituationRef = useRef('');
 
+  // Practice Plan state (Dynamic Guidance Configuration)
+  const [planMinutes, setPlanMinutes] = useState(5);
+  const [planFrequency, setPlanFrequency] = useState(3);
+
+  function updatePlanMinutes(minutes: number) {
+    setPlanMinutes(minutes);
+    try {
+      localStorage.setItem('mycommpal_plan_minutes', String(minutes));
+    } catch (e) {}
+  }
+
+  function updatePlanFrequency(frequency: number) {
+    setPlanFrequency(frequency);
+    try {
+      localStorage.setItem('mycommpal_plan_frequency', String(frequency));
+    } catch (e) {}
+  }
+
   // Practice Consistency & Streak state
   const [streakData, setStreakData] = useState<PracticeStreak>({
     currentStreak: 0,
     longestStreak: 0,
     lastPracticeDate: '',
     totalSessions: 0,
-    weeklyGoal: 5,
+    weeklyGoal: 3,
     historyDates: [],
   });
 
@@ -148,13 +166,31 @@ export default function MyCommPalApp() {
     customSituationRef.current = customSituation;
   }, [customSituation]);
 
-  // Load streak from localStorage and load history in background
+  // Load streak & practice guidance config from localStorage and load history in background
   useEffect(() => {
     try {
+      const savedMin = localStorage.getItem('mycommpal_plan_minutes');
+      if (savedMin) setPlanMinutes(Number(savedMin));
+      const savedFreq = localStorage.getItem('mycommpal_plan_frequency');
+      if (savedFreq) setPlanFrequency(Number(savedFreq));
+
+      const practiceCompleted = localStorage.getItem('mycommpal_practice_completed') === 'true';
       const saved = localStorage.getItem('mycommpal_streak');
-      if (saved) {
+      if (saved && practiceCompleted) {
         const parsed = JSON.parse(saved);
-        if (parsed) setStreakData(parsed);
+        if (parsed && typeof parsed.totalSessions === 'number') {
+          setStreakData(parsed);
+        }
+      } else if (!practiceCompleted) {
+        // Reset to clean 0 state if no practice has been completed yet
+        setStreakData({
+          currentStreak: 0,
+          longestStreak: 0,
+          lastPracticeDate: '',
+          totalSessions: 0,
+          weeklyGoal: savedFreq ? Number(savedFreq) : 3,
+          historyDates: [],
+        });
       }
     } catch (e) {}
 
@@ -164,12 +200,22 @@ export default function MyCommPalApp() {
       .then(data => {
         if (data.sessions && Array.isArray(data.sessions)) {
           setHistorySessions(data.sessions);
-          if (data.sessions.length > 0) {
+          const practiceSessions = data.sessions.filter(
+            (s: any) => s.comparison || s.retryScores || (s.retryTranscript && s.retryTranscript.length >= 35)
+          );
+          if (practiceSessions.length > 0) {
+            try {
+              localStorage.setItem('mycommpal_practice_completed', 'true');
+            } catch (e) {}
             setStreakData(prev => ({
               ...prev,
-              totalSessions: Math.max(prev.totalSessions || 0, data.sessions.length),
+              totalSessions: Math.max(prev.totalSessions || 0, practiceSessions.length),
               currentStreak: Math.max(prev.currentStreak || 0, 1),
               longestStreak: Math.max(prev.longestStreak || 0, 1),
+              historyDates: Array.from(new Set([
+                ...(prev.historyDates || []),
+                ...practiceSessions.map((s: any) => s.createdAt ? s.createdAt.split('T')[0] : getTodayDateString())
+              ])),
             }));
           }
         }
@@ -180,10 +226,6 @@ export default function MyCommPalApp() {
   // Mentor Assessment state
   const [assessing, setAssessing] = useState(false);
   const [assessment, setAssessment] = useState<MentorAssessResponse | null>(null);
-
-  // Practice Plan state
-  const [planMinutes, setPlanMinutes] = useState(5);
-  const [planFrequency, setPlanFrequency] = useState(3);
 
   // Comparison State
   const [comparing, setComparing] = useState(false);
@@ -664,14 +706,6 @@ export default function MyCommPalApp() {
       if (!res.ok) throw new Error(data.error || 'Failed to evaluate response');
 
       setAssessment(data);
-      // Update consistency streak
-      setStreakData(prev => {
-        const next = calculateStreak(prev);
-        try {
-          localStorage.setItem('mycommpal_streak', JSON.stringify(next));
-        } catch (e) {}
-        return next;
-      });
       setCoachingTab('coaching');
       setStep(2);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -748,6 +782,11 @@ export default function MyCommPalApp() {
       }
 
       setComparison(data);
+      // Mark practice session completed
+      try {
+        localStorage.setItem('mycommpal_practice_completed', 'true');
+      } catch (e) {}
+
       // Update consistency streak
       setStreakData(prev => {
         const next = calculateStreak(prev);
@@ -1108,8 +1147,25 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
   // =========================================================================
   // VIEW 2: AUTHENTICATED APP (Full 4-Screen HTML Prototype Flow)
   // =========================================================================
-  const hasCompletedSession =
-    (streakData.totalSessions || 0) > 0 || (historySessions && historySessions.length > 0);
+  // Practice session completed if user finished a retry comparison in current session OR has past completed practice sessions
+  const completedPracticeHistoryCount = historySessions.filter(
+    s => s.comparison || s.retryScores || (s.retryTranscript && s.retryTranscript.length >= 35)
+  ).length;
+
+  const hasCompletedPracticeSession =
+    comparison !== null ||
+    completedPracticeHistoryCount > 0 ||
+    (streakData.totalSessions > 0 && typeof window !== 'undefined' && localStorage.getItem('mycommpal_practice_completed') === 'true');
+
+  // Dynamic progress based on practice guidance config
+  const daysPracticedThisWeek = [0, 1, 2, 3, 4, 5, 6].filter(dayIdx =>
+    isDayActiveThisWeek(dayIdx, streakData.historyDates)
+  ).length;
+  const currentWeekCompleted = Math.max(daysPracticedThisWeek, comparison ? 1 : 0);
+  const weeklyTarget = planFrequency || 3;
+  const sessionDuration = planMinutes || 5;
+  const weeklyProgressPercent = Math.min(100, Math.round((currentWeekCompleted / weeklyTarget) * 100));
+  const remainingInTarget = Math.max(0, weeklyTarget - currentWeekCompleted);
 
   return (
     <div className="shell">
@@ -1151,8 +1207,8 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
           })}
         </div>
 
-        {/* Practice Streak Card (Shown only when at least one session is completed) */}
-        {hasCompletedSession && (
+        {/* Practice Streak Card (Shown ONLY when user has completed at least one practice session) */}
+        {hasCompletedPracticeSession && (
           <div className="sidebar-streak-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1b54' }}>
@@ -1162,8 +1218,30 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 {streakData.currentStreak} Day{streakData.currentStreak === 1 ? '' : 's'}
               </span>
             </div>
-            <div className="tiny" style={{ color: '#7b7194', marginTop: '3px' }}>
-              Weekly Goal: 5 reps · Best: {streakData.longestStreak}d
+
+            {/* Dynamic Guidance Rhythm Config */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+              <span className="tiny" style={{ color: '#7b7194' }}>
+                Weekly Target: <strong>{weeklyTarget} reps</strong> ({sessionDuration}m)
+              </span>
+              <span className="tiny" style={{ color: currentWeekCompleted >= weeklyTarget ? '#059669' : '#6d28d9', fontWeight: 700 }}>
+                {currentWeekCompleted}/{weeklyTarget}
+              </span>
+            </div>
+
+            {/* Dynamic Progress Bar */}
+            <div style={{ background: '#ede7fb', borderRadius: '6px', height: '5px', overflow: 'hidden', margin: '4px 0 8px' }}>
+              <div
+                style={{
+                  width: `${weeklyProgressPercent}%`,
+                  background: currentWeekCompleted >= weeklyTarget
+                    ? 'linear-gradient(90deg, #10b981, #059669)'
+                    : 'linear-gradient(90deg, #7c3aed, #4f46e5)',
+                  height: '100%',
+                  borderRadius: '6px',
+                  transition: 'width 0.4s ease',
+                }}
+              />
             </div>
 
             <div className="streak-week-grid">
@@ -1176,6 +1254,12 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   </div>
                 );
               })}
+            </div>
+
+            <div className="tiny" style={{ color: '#554e66', margin: '4px 0 8px', fontSize: '11px', textAlign: 'center' }}>
+              {currentWeekCompleted >= weeklyTarget
+                ? `🎉 Weekly cadence met! (${weeklyTarget} of ${weeklyTarget})`
+                : `🎯 ${remainingInTarget} more ${remainingInTarget === 1 ? 'rep' : 'reps'} to hit your ${weeklyTarget}-day target`}
             </div>
 
             <button
@@ -1748,7 +1832,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                           <select
                             id="durationSelect"
                             value={planMinutes}
-                            onChange={e => setPlanMinutes(Number(e.target.value))}
+                            onChange={e => updatePlanMinutes(Number(e.target.value))}
                           >
                             <option value={3}>3 minutes (quick micro-drill)</option>
                             <option value={5}>5 minutes (recommended)</option>
@@ -1762,7 +1846,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                           <select
                             id="freqSelect"
                             value={planFrequency}
-                            onChange={e => setPlanFrequency(Number(e.target.value))}
+                            onChange={e => updatePlanFrequency(Number(e.target.value))}
                           >
                             <option value={1}>1 session</option>
                             <option value={2}>2 sessions</option>
@@ -2287,7 +2371,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                           <select
                             id="durationSelect"
                             value={planMinutes}
-                            onChange={e => setPlanMinutes(Number(e.target.value))}
+                            onChange={e => updatePlanMinutes(Number(e.target.value))}
                           >
                             <option value={3}>3 minutes (quick micro-drill)</option>
                             <option value={5}>5 minutes (recommended)</option>
@@ -2301,7 +2385,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                           <select
                             id="freqSelect"
                             value={planFrequency}
-                            onChange={e => setPlanFrequency(Number(e.target.value))}
+                            onChange={e => updatePlanFrequency(Number(e.target.value))}
                           >
                             <option value={1}>1 session</option>
                             <option value={2}>2 sessions</option>
