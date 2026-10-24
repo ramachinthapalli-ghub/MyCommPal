@@ -58,7 +58,7 @@ export default function MyCommPalApp() {
   const [step, setStep] = useState(0);
   const [goal, setGoal] = useState<GoalType>('Articulation');
   const [audience, setAudience] = useState('Cross-functional stakeholders');
-  const [scenarioMode, setScenarioMode] = useState<'vira' | 'mine'>('vira');
+  const [scenarioMode, setScenarioMode] = useState<'vira' | 'mine'>('mine');
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [customSituation, setCustomSituation] = useState('');
 
@@ -550,6 +550,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
       setFeedbackTags([]);
       setFeedbackComment('');
       setFeedbackSubmitted(false);
+      setScenarioMode('mine');
       setStep(0);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -870,7 +871,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 <button
                   type="button"
                   className={`option ${goal === 'Articulation' ? 'selected' : ''}`}
-                  onClick={() => setGoal('Articulation')}
+                  onClick={() => {
+                    setGoal('Articulation');
+                    setScenarioMode('mine');
+                  }}
                 >
                   <strong>💬</strong>
                   Articulate my ideas
@@ -878,7 +882,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 <button
                   type="button"
                   className={`option ${goal === 'Storytelling' ? 'selected' : ''}`}
-                  onClick={() => setGoal('Storytelling')}
+                  onClick={() => {
+                    setGoal('Storytelling');
+                    setScenarioMode('mine');
+                  }}
                 >
                   <strong>📖</strong>
                   Tell stronger stories
@@ -886,7 +893,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 <button
                   type="button"
                   className={`option ${goal === 'Presentations' ? 'selected' : ''}`}
-                  onClick={() => setGoal('Presentations')}
+                  onClick={() => {
+                    setGoal('Presentations');
+                    setScenarioMode('mine');
+                  }}
                 >
                   <strong>🎤</strong>
                   Present with impact
@@ -908,7 +918,13 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               </select>
 
               <div className="actions">
-                <button className="btn" onClick={() => setStep(1)}>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setScenarioMode('mine');
+                    setStep(1);
+                  }}
+                >
                   Meet my challenge →
                 </button>
               </div>
@@ -928,19 +944,19 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 <div className="scenario-options">
                   <button
                     type="button"
+                    className={`scenario-option ${scenarioMode === 'mine' ? 'active' : ''}`}
+                    onClick={() => setScenarioMode('mine')}
+                  >
+                    <strong>✍️ Prepare me for a situation</strong>
+                    <span>Prepare for an actual conversation coming up</span>
+                  </button>
+                  <button
+                    type="button"
                     className={`scenario-option ${scenarioMode === 'vira' ? 'active' : ''}`}
                     onClick={() => setScenarioMode('vira')}
                   >
                     <strong>✨ Let Vira choose</strong>
                     <span>Practice Real PM Conversations</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`scenario-option ${scenarioMode === 'mine' ? 'active' : ''}`}
-                    onClick={() => setScenarioMode('mine')}
-                  >
-                    <strong>✍️ Bring my situation</strong>
-                    <span>Prepare for an actual conversation coming up</span>
                   </button>
                 </div>
 
