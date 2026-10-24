@@ -26,6 +26,25 @@ export interface Scores {
   conciseness: number;
 }
 
+// Layer C: PM Decision Communication Intelligence (1-5 scale, context-aware)
+export interface PMDecisionDimensionScore {
+  applicable: boolean;
+  score?: number; // 1-5 when applicable
+  rationale: string;
+  evidenceQuote?: string; // verbatim quote from user's response
+  improvementSuggestion?: string; // focused actionable guidance
+}
+
+export interface PMDecisionScores {
+  isDecisionScenario: boolean;
+  decisionClarity: PMDecisionDimensionScore;
+  supportingEvidence: PMDecisionDimensionScore;
+  tradeoffArticulation: PMDecisionDimensionScore;
+  businessImpact: PMDecisionDimensionScore;
+  overallDecisionRating?: number; // 1-5 average across applicable dimensions
+  overallRationale?: string;
+}
+
 // Layer B: Goal-Specific Effectiveness (1-5 scale)
 export interface GoalCriteriaResult {
   criterion: string;
@@ -163,9 +182,14 @@ export interface MentorAssessResponse {
     conciseness: string;
     scenarioAlignment?: string;
     goalEffectiveness?: string;
+    decisionClarity?: string;
+    supportingEvidence?: string;
+    tradeoffArticulation?: string;
+    businessImpact?: string;
   };
   goalEffectiveness: GoalEffectiveness; // Layer B
   scenarioAlignment: ScenarioAlignment; // Prompt requirement fulfillment
+  pmDecisionScores?: PMDecisionScores; // Layer C: Product Decision Communication Intelligence
   strongest: 'clarity' | 'structure' | 'conciseness';
   focus: 'clarity' | 'structure' | 'conciseness';
   focusExplanation: string;
@@ -213,6 +237,7 @@ export interface MentorCompareRequest {
   firstScores: Scores;
   firstGoalEffectiveness?: GoalEffectiveness;
   firstScenarioAlignment?: ScenarioAlignment;
+  firstPmDecisionScores?: PMDecisionScores;
   practice1Scores?: Scores;
   practice1GoalEffectiveness?: GoalEffectiveness;
   practice1ScenarioAlignment?: ScenarioAlignment;
@@ -231,12 +256,18 @@ export interface MentorCompareResponse {
   secondGoalEffectiveness?: GoalEffectiveness;
   firstScenarioAlignment?: ScenarioAlignment;
   secondScenarioAlignment?: ScenarioAlignment;
+  firstPmDecisionScores?: PMDecisionScores;
+  secondPmDecisionScores?: PMDecisionScores;
   dimensions?: {
     clarity: DimensionComparison;
     structure: DimensionComparison;
     conciseness: DimensionComparison;
     goalEffectiveness?: DimensionComparison;
     scenarioAlignment?: DimensionComparison;
+    decisionClarity?: DimensionComparison;
+    supportingEvidence?: DimensionComparison;
+    tradeoffArticulation?: DimensionComparison;
+    businessImpact?: DimensionComparison;
   };
   multiAttemptRows?: MultiAttemptProgressRow[];
   hasPractice2?: boolean;

@@ -450,6 +450,7 @@ export default function MyCommPalApp() {
         assessment,
         scenarioMode,
         attemptIndex: practiceAttempt,
+        firstPmDecisionScores: assessment.pmDecisionScores,
       };
 
       if (practiceAttempt === 1) {
@@ -1620,6 +1621,120 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   </div>
                 )}
 
+                {/* Layer C: Product Decision Communication Intelligence (Context-Aware) */}
+                {assessment.pmDecisionScores && (
+                  <div style={{ marginBottom: '20px', padding: '16px 18px', background: assessment.pmDecisionScores.isDecisionScenario ? '#ffffff' : '#fcfaff', border: '1.5px solid #ece4ff', borderRadius: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '18px' }}>🎯</span>
+                        <strong style={{ fontSize: '14.5px', color: '#2e264a' }}>
+                          Product Decision Communication Intelligence
+                        </strong>
+                      </div>
+                      <span className="tiny" style={{
+                        background: assessment.pmDecisionScores.isDecisionScenario ? '#eef2ff' : '#f3f4f6',
+                        color: assessment.pmDecisionScores.isDecisionScenario ? '#4338ca' : '#6b7280',
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontWeight: 700
+                      }}>
+                        {assessment.pmDecisionScores.isDecisionScenario
+                          ? (assessment.pmDecisionScores.overallDecisionRating ? `Overall Rating: ${assessment.pmDecisionScores.overallDecisionRating}/5` : 'Decision Specific')
+                          : 'Not Applicable for Storytelling'}
+                      </span>
+                    </div>
+
+                    {!assessment.pmDecisionScores.isDecisionScenario ? (
+                      <div style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                        ℹ️ <strong>Non-Decision Context:</strong> This scenario focuses on personal career narrative and storytelling. Decision trade-off and product evidence rubrics are marked not applicable and do not penalize your communication score.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
+                        {/* 1. Decision Clarity */}
+                        <div style={{ padding: '12px 14px', background: '#faf9fe', borderRadius: '12px', border: '1px solid #eee8fa' }}>
+                          <div className="skill" style={{ margin: '2px 0 6px' }}>
+                            <div className="skill-name" style={{ width: '170px', fontWeight: 700 }}>Decision Clarity</div>
+                            <div className="bar">
+                              <div className="fill" style={{ width: `${((assessment.pmDecisionScores.decisionClarity.score || 3) / 5) * 100}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8)' }} />
+                            </div>
+                            <div className="score" style={{ color: '#4f46e5' }}>{assessment.pmDecisionScores.decisionClarity.score || 3}/5</div>
+                          </div>
+                          <p className="tiny" style={{ margin: '2px 0 4px', color: '#554e66', lineHeight: 1.45 }}>
+                            {assessment.pmDecisionScores.decisionClarity.rationale}
+                          </p>
+                          {assessment.pmDecisionScores.decisionClarity.improvementSuggestion && (
+                            <div className="tiny" style={{ marginTop: '6px', color: '#4338ca', background: '#eef2ff', padding: '6px 10px', borderRadius: '8px' }}>
+                              💡 <strong>Vira&apos;s Tip:</strong> {assessment.pmDecisionScores.decisionClarity.improvementSuggestion}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 2. Supporting Evidence */}
+                        <div style={{ padding: '12px 14px', background: '#faf9fe', borderRadius: '12px', border: '1px solid #eee8fa' }}>
+                          <div className="skill" style={{ margin: '2px 0 6px' }}>
+                            <div className="skill-name" style={{ width: '170px', fontWeight: 700 }}>Supporting Evidence</div>
+                            <div className="bar">
+                              <div className="fill" style={{ width: `${((assessment.pmDecisionScores.supportingEvidence.score || 3) / 5) * 100}%`, background: 'linear-gradient(90deg, #0ea5e9, #38bdf8)' }} />
+                            </div>
+                            <div className="score" style={{ color: '#0284c7' }}>{assessment.pmDecisionScores.supportingEvidence.score || 3}/5</div>
+                          </div>
+                          <p className="tiny" style={{ margin: '2px 0 4px', color: '#554e66', lineHeight: 1.45 }}>
+                            {assessment.pmDecisionScores.supportingEvidence.rationale}
+                          </p>
+                          {assessment.pmDecisionScores.supportingEvidence.evidenceQuote && (
+                            <div className="tiny" style={{ marginTop: '4px', color: '#0369a1', fontStyle: 'italic' }}>
+                              “{assessment.pmDecisionScores.supportingEvidence.evidenceQuote}”
+                            </div>
+                          )}
+                          {assessment.pmDecisionScores.supportingEvidence.improvementSuggestion && (
+                            <div className="tiny" style={{ marginTop: '6px', color: '#0369a1', background: '#f0f9ff', padding: '6px 10px', borderRadius: '8px' }}>
+                              💡 <strong>Vira&apos;s Tip:</strong> {assessment.pmDecisionScores.supportingEvidence.improvementSuggestion}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 3. Trade-off Articulation */}
+                        <div style={{ padding: '12px 14px', background: '#faf9fe', borderRadius: '12px', border: '1px solid #eee8fa' }}>
+                          <div className="skill" style={{ margin: '2px 0 6px' }}>
+                            <div className="skill-name" style={{ width: '170px', fontWeight: 700 }}>Trade-off Articulation</div>
+                            <div className="bar">
+                              <div className="fill" style={{ width: `${((assessment.pmDecisionScores.tradeoffArticulation.score || 3) / 5) * 100}%`, background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
+                            </div>
+                            <div className="score" style={{ color: '#d97706' }}>{assessment.pmDecisionScores.tradeoffArticulation.score || 3}/5</div>
+                          </div>
+                          <p className="tiny" style={{ margin: '2px 0 4px', color: '#554e66', lineHeight: 1.45 }}>
+                            {assessment.pmDecisionScores.tradeoffArticulation.rationale}
+                          </p>
+                          {assessment.pmDecisionScores.tradeoffArticulation.improvementSuggestion && (
+                            <div className="tiny" style={{ marginTop: '6px', color: '#92400e', background: '#fffbeb', padding: '6px 10px', borderRadius: '8px' }}>
+                              💡 <strong>Vira&apos;s Tip:</strong> {assessment.pmDecisionScores.tradeoffArticulation.improvementSuggestion}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 4. Business or Customer Impact */}
+                        <div style={{ padding: '12px 14px', background: '#faf9fe', borderRadius: '12px', border: '1px solid #eee8fa' }}>
+                          <div className="skill" style={{ margin: '2px 0 6px' }}>
+                            <div className="skill-name" style={{ width: '170px', fontWeight: 700 }}>Business or Customer Impact</div>
+                            <div className="bar">
+                              <div className="fill" style={{ width: `${((assessment.pmDecisionScores.businessImpact.score || 3) / 5) * 100}%`, background: 'linear-gradient(90deg, #10b981, #34d399)' }} />
+                            </div>
+                            <div className="score" style={{ color: '#059669' }}>{assessment.pmDecisionScores.businessImpact.score || 3}/5</div>
+                          </div>
+                          <p className="tiny" style={{ margin: '2px 0 4px', color: '#554e66', lineHeight: 1.45 }}>
+                            {assessment.pmDecisionScores.businessImpact.rationale}
+                          </p>
+                          {assessment.pmDecisionScores.businessImpact.improvementSuggestion && (
+                            <div className="tiny" style={{ marginTop: '6px', color: '#065f46', background: '#ecfdf5', padding: '6px 10px', borderRadius: '8px' }}>
+                              💡 <strong>Vira&apos;s Tip:</strong> {assessment.pmDecisionScores.businessImpact.improvementSuggestion}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="actions" style={{ marginTop: '20px' }}>
                   <button className="btn" onClick={() => setStep(3)}>
                     Practice this technique now →
@@ -1870,6 +1985,66 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     </div>
                   )}
                 </div>
+
+                {/* Accordion 5: Product Decision Communication Intelligence Deep Dive */}
+                {assessment.pmDecisionScores && assessment.pmDecisionScores.isDecisionScenario && (
+                  <div className="accordion-item">
+                    <button
+                      type="button"
+                      className="accordion-trigger"
+                      aria-expanded={deepDiveSections.decision}
+                      onClick={() => toggleDeepDiveSection('decision')}
+                    >
+                      <span>🎯 Product Decision Intelligence Breakdown & Evidence</span>
+                      <span>{deepDiveSections.decision ? '▲' : '▼'}</span>
+                    </button>
+                    {deepDiveSections.decision && (
+                      <div className="accordion-body">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ padding: '10px 14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '12.5px' }}>
+                            <strong style={{ color: '#1e293b' }}>Decision Clarity:</strong>
+                            <p style={{ margin: '4px 0', color: '#475569' }}>{assessment.pmDecisionScores.decisionClarity.rationale}</p>
+                            {assessment.pmDecisionScores.decisionClarity.evidenceQuote && (
+                              <div className="quote" style={{ margin: '6px 0 0', fontSize: '12px', borderLeftColor: '#6366f1' }}>
+                                “{assessment.pmDecisionScores.decisionClarity.evidenceQuote}”
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ padding: '10px 14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '12.5px' }}>
+                            <strong style={{ color: '#1e293b' }}>Supporting Evidence:</strong>
+                            <p style={{ margin: '4px 0', color: '#475569' }}>{assessment.pmDecisionScores.supportingEvidence.rationale}</p>
+                            {assessment.pmDecisionScores.supportingEvidence.evidenceQuote && (
+                              <div className="quote" style={{ margin: '6px 0 0', fontSize: '12px', borderLeftColor: '#0ea5e9' }}>
+                                “{assessment.pmDecisionScores.supportingEvidence.evidenceQuote}”
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ padding: '10px 14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '12.5px' }}>
+                            <strong style={{ color: '#1e293b' }}>Trade-off Articulation:</strong>
+                            <p style={{ margin: '4px 0', color: '#475569' }}>{assessment.pmDecisionScores.tradeoffArticulation.rationale}</p>
+                            {assessment.pmDecisionScores.tradeoffArticulation.evidenceQuote && (
+                              <div className="quote" style={{ margin: '6px 0 0', fontSize: '12px', borderLeftColor: '#f59e0b' }}>
+                                “{assessment.pmDecisionScores.tradeoffArticulation.evidenceQuote}”
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ padding: '10px 14px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '12.5px' }}>
+                            <strong style={{ color: '#1e293b' }}>Business or Customer Impact:</strong>
+                            <p style={{ margin: '4px 0', color: '#475569' }}>{assessment.pmDecisionScores.businessImpact.rationale}</p>
+                            {assessment.pmDecisionScores.businessImpact.evidenceQuote && (
+                              <div className="quote" style={{ margin: '6px 0 0', fontSize: '12px', borderLeftColor: '#10b981' }}>
+                                “{assessment.pmDecisionScores.businessImpact.evidenceQuote}”
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="actions" style={{ marginTop: '20px' }}>
                   <button className="btn" onClick={() => setStep(3)}>

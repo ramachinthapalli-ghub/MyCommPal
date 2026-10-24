@@ -426,7 +426,7 @@ async function runSuite() {
       transcript: 'My recommendation is adopting the new CI/CD pipeline because build times will drop 50%.',
     });
 
-    assert(assessRes.scoreExplanations && Object.keys(assessRes.scoreExplanations).length === 5, 'Must provide all 5 score explanations');
+    assert(assessRes.scoreExplanations && Object.keys(assessRes.scoreExplanations).length >= 5, 'Must provide all core score explanations');
     assert(assessRes.evidenceCoaching.nextChallenge.sentenceStarter.length > 0, 'Must provide sentence starter for mobile drill');
 
     const compareRes = fallbackCompare({
@@ -440,7 +440,7 @@ async function runSuite() {
       firstScores: { clarity: 3, structure: 3, conciseness: 3 },
     });
 
-    assert(compareRes.multiAttemptRows && compareRes.multiAttemptRows.length === 5, 'Must provide 5 rows for progress table');
+    assert(compareRes.multiAttemptRows && compareRes.multiAttemptRows.length >= 5, 'Must provide progress table rows');
     assert(compareRes.nextChallenge.sentenceStarter.length > 0, 'Must provide next challenge sentence starter');
   });
 

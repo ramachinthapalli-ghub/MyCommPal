@@ -168,6 +168,177 @@ export const GOAL_SPECIFIC_RUBRICS: Record<string, GoalCriteriaDefinition> = {
 };
 
 // =========================================================================
+// LAYER C: PRODUCT DECISION COMMUNICATION INTELLIGENCE (1-5 Rubric)
+// =========================================================================
+
+export const PM_DECISION_RUBRICS: Record<
+  'decisionClarity' | 'supportingEvidence' | 'tradeoffArticulation' | 'businessImpact',
+  DimensionRubric
+> = {
+  decisionClarity: {
+    name: 'Decision Clarity',
+    description: 'Does the PM explicitly state their recommendation upfront, making the decision understandable and unambiguous?',
+    levels: {
+      1: 'Ambiguous / No Stance: Avoids stating a recommendation, hedges completely, or leaves the listener guessing what is being decided.',
+      2: 'Buried Decision: A preference is mentioned, but it is obscured by passive language or deferred behind excessive background.',
+      3: 'Stated with Delay: The recommendation is understandable, but takes too long to appear or requires clarification on scope.',
+      4: 'Direct & Defensible: Explicit recommendation stated upfront. The decision is clear, decisive, and unambiguous.',
+      5: 'Executive Decision Command: Crystal-clear decision headline delivered in the first sentence. Immediate clarity on recommendation and scope.',
+    },
+  },
+  supportingEvidence: {
+    name: 'Supporting Evidence',
+    description: 'Does the PM explain the reasoning behind the decision, referencing customer insights, data, or business constraints, and distinguish facts from assumptions?',
+    levels: {
+      1: 'Unsubstantiated: Pure personal assertion or opinion without reasoning, data, or customer context.',
+      2: 'Vague Reasoning: Cites generic assumptions or buzzwords without concrete customer signals, metrics, or validation status.',
+      3: 'Plausible Logic: Solid conceptual reasoning, but lacks specific customer quotes, telemetry data, or clear evidence grounding.',
+      4: 'Grounded & Evidence-Backed: Connects decision directly to observable customer behaviors, data signals, or concrete operational constraints.',
+      5: 'Rigorous Evidence Synthesis: Airtight justification balancing customer insight, data signals, and technical constraints while transparently acknowledging assumptions.',
+    },
+  },
+  tradeoffArticulation: {
+    name: 'Trade-off Articulation',
+    description: 'Does the PM acknowledge competing priorities, explain what is being deprioritized, and communicate the consequences of the decision?',
+    levels: {
+      1: 'One-Sided / Ignores Trade-offs: Pretends the team can do everything with zero cost, or completely ignores the competing request.',
+      2: 'Defensive Brush-off: Dismisses alternative priorities without explaining why or what the consequences of saying yes would be.',
+      3: 'Acknowledged but Soft: Mentions that another project is delayed or impacted, but does not explain the trade-off rationale or risk mitigation.',
+      4: 'Explicit Trade-off: Decisively states what is deprioritized, why that cost is consciously accepted, and how downstream risks are managed.',
+      5: 'Masterful Trade-off Architecture: Transparently frames the opportunity cost, turns conflict into shared alignment, and outlines clear mitigation.',
+    },
+  },
+  businessImpact: {
+    name: 'Business or Customer Impact',
+    description: 'Does the PM explain expected customer or business outcomes, connect decisions to meaningful value, and distinguish expected from demonstrated impact?',
+    levels: {
+      1: 'Output / Task-Focused: Focuses solely on feature tasks or tickets with no mention of customer value or business outcomes.',
+      2: 'Vague Value: Uses hand-waving claims ("will improve user experience") without connecting to a concrete metric or customer problem.',
+      3: 'Directional Impact: Identifies the target customer or business benefit, but the magnitude or mechanism of impact is ambiguous.',
+      4: 'Value-Connected: Concretely connects the decision to retention, conversion, developer velocity, or customer pain reduction.',
+      5: 'Strategic Value Leadership: Compellingly links the immediate decision to compounding customer outcomes and long-term business leverage.',
+    },
+  },
+};
+
+/**
+ * Context-awareness helper: Determines whether a scenario involves a product management decision
+ * (prioritization, roadmap, trade-off, delay, feature strategy, resource allocation, stakeholder decision discussion).
+ * Returns false for personal storytelling, career journey, or general presentation practice without a product decision.
+ */
+export function isProductDecisionScenario(scenario: string, goal: string): boolean {
+  const s = (scenario || '').toLowerCase();
+  const g = (goal || '').toLowerCase();
+
+  // Explicit non-decision storytelling / career reflection markers
+  const isPersonalStory =
+    (g.includes('story') || s.includes('story') || s.includes('tell me about a time') || s.includes('journey')) &&
+    (s.includes('misconception') || s.includes('swimming') || s.includes('career') || s.includes('transition into pm') || s.includes('started in pm') || s.includes('biggest failure you learned'));
+
+  // If it's a personal career/origin story without a product decision, return false
+  if (isPersonalStory && !s.includes('prioritize') && !s.includes('delay') && !s.includes('roadmap') && !s.includes('trade-off')) {
+    return false;
+  }
+
+  // Common PM decision markers
+  const decisionKeywords = [
+    'priorit',
+    'trade-off',
+    'tradeoff',
+    'delay',
+    'roadmap',
+    'strategy',
+    'launch',
+    'monetiz',
+    'price',
+    'pricing',
+    'tier',
+    'feature',
+    'cut',
+    'scope',
+    'stakeholder',
+    'onboarding',
+    'reporting',
+    'database',
+    'migration',
+    'platform',
+    'bug',
+    'sla',
+    'churn',
+    'retention',
+    'tech debt',
+    'vp',
+    'executive',
+    'recommendation',
+    'decision',
+    'allocate',
+    'capacity',
+    'resource',
+    'build vs buy',
+    'push back',
+    'depriorit',
+  ];
+
+  if (decisionKeywords.some(kw => s.includes(kw))) {
+    return true;
+  }
+
+  // Articulation, Persuasion, and Leadership communication goals usually involve decisions
+  if (g.includes('articulat') || g.includes('persuas') || g.includes('leader') || g.includes('stakeholder')) {
+    return true;
+  }
+
+  return false;
+}
+
+export function getShortDecisionScoreExplanation(dimension: string, score: number): string {
+  const clamped = Math.min(5, Math.max(1, Math.round(score))) as 1 | 2 | 3 | 4 | 5;
+  const d = dimension.toLowerCase();
+
+  if (d.includes('clarity') || d === 'decisionclarity') {
+    switch (clamped) {
+      case 1: return 'Recommendation was avoided or left ambiguous, leaving listeners unsure what was decided.';
+      case 2: return 'Decision was mentioned, but buried behind passive language or excessive preamble.';
+      case 3: return 'Recommendation is understandable, but took too long to appear or lacked clear scope.';
+      case 4: return 'Direct recommendation established upfront with clear, decisive scope.';
+      case 5: return 'Crystal-clear decision headline delivered in sentence one with executive command.';
+    }
+  }
+
+  if (d.includes('evidence') || d === 'supportingevidence') {
+    switch (clamped) {
+      case 1: return 'Pure assertion or opinion without customer evidence, data, or operational rationale.';
+      case 2: return 'Generic buzzwords used without concrete customer behaviors, metrics, or validation proof.';
+      case 3: return 'Plausible logical reasoning, but lacks specific customer proof points or telemetry data.';
+      case 4: return 'Grounded in observable customer signals, retention metrics, or concrete operational constraints.';
+      case 5: return 'Airtight evidence synthesis balancing user research, metrics, and technical realities.';
+    }
+  }
+
+  if (d.includes('tradeoff') || d === 'tradeoffarticulation') {
+    switch (clamped) {
+      case 1: return 'One-sided argument that ignored competing requests or assumed zero opportunity cost.';
+      case 2: return 'Dismissed competing priorities defensively without explaining the trade-off rationale.';
+      case 3: return 'Acknowledged that another initiative is delayed, but trade-off consequence was unstated.';
+      case 4: return 'Explicitly named what is deprioritized, why the trade-off is accepted, and how risks are managed.';
+      case 5: return 'Masterful trade-off framing that turned conflict into shared ownership of business reality.';
+    }
+  }
+
+  if (d.includes('impact') || d === 'businessimpact') {
+    switch (clamped) {
+      case 1: return 'Focused strictly on feature implementation tasks with no mention of customer or business value.';
+      case 2: return 'Vague hand-waving claims without connecting to a measurable customer problem or metric.';
+      case 3: return 'Identified general value direction, but the mechanism or scale of impact was ambiguous.';
+      case 4: return 'Concretely connected the decision to customer retention, conversion, or strategic velocity.';
+      case 5: return 'Compellingly linked the decision to compounding customer outcomes and long-term business value.';
+    }
+  }
+
+  return `Evaluated as Level ${clamped} based on PM decision communication benchmarks.`;
+}
+
+// =========================================================================
 // SCENARIO ALIGNMENT (1-5 Rubric)
 // =========================================================================
 
@@ -272,6 +443,15 @@ export function formatRubricsForSystemPrompt(): string {
   promptText += `${SCENARIO_ALIGNMENT_RUBRIC.description}\n`;
   for (const [lvl, text] of Object.entries(SCENARIO_ALIGNMENT_RUBRIC.levels)) {
     promptText += `  - Level ${lvl}: ${text}\n`;
+  }
+
+  promptText += `\n### LAYER C: PRODUCT DECISION COMMUNICATION INTELLIGENCE (1-5 SCALE, CONTEXT-AWARE)\n`;
+  promptText += `Apply ONLY when the scenario involves a product management decision (prioritization, roadmap, trade-offs, strategy, launch, delays, stakeholder conflict). Do NOT penalize personal storytelling or non-decision scenarios.\n`;
+  for (const [key, dim] of Object.entries(PM_DECISION_RUBRICS)) {
+    promptText += `\n**${dim.name}**: ${dim.description}\n`;
+    for (const [lvl, text] of Object.entries(dim.levels)) {
+      promptText += `  - Level ${lvl}: ${text}\n`;
+    }
   }
 
   return promptText;

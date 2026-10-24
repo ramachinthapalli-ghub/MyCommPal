@@ -143,6 +143,10 @@ export async function POST(req: NextRequest) {
         thirdTranscript,
         focus: focus || 'structure',
         firstScores: firstScores || { clarity: 2, structure: 2, conciseness: 2 },
+        firstGoalEffectiveness: body.firstGoalEffectiveness || assessment?.goalEffectiveness,
+        firstScenarioAlignment: body.firstScenarioAlignment || assessment?.scenarioAlignment,
+        firstPmDecisionScores: body.firstPmDecisionScores || assessment?.pmDecisionScores,
+        assessment,
         practice1Scores,
         attemptIndex: attemptIndex || (thirdTranscript ? 2 : 1),
       });
