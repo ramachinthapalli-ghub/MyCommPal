@@ -67,8 +67,11 @@ export default function MyCommPalApp() {
   const [answer2, setAnswer2] = useState('');
   const [isRecording1, setIsRecording1] = useState(false);
   const [isRecording2, setIsRecording2] = useState(false);
+  const [isRecordingSituation, setIsRecordingSituation] = useState(false);
   const [recTimer1, setRecTimer1] = useState('00:00');
   const [recTimer2, setRecTimer2] = useState('00:00');
+  const [recTimerSituation, setRecTimerSituation] = useState('00:00');
+  const speechBaseTextRef = useRef('');
   const recognitionRef = useRef<any>(null);
   const timerIntervalRef = useRef<any>(null);
 
@@ -296,14 +299,60 @@ export default function MyCommPalApp() {
         : 'Describe your upcoming situation above to practice with your own challenge.'
       : SCENARIOS[goal][scenarioIndex % SCENARIOS[goal].length];
 
-  // Speech Recognition
-  function toggleSpeech(inputIndex: 1 | 2) {
-    const isRecording = inputIndex === 1 ? isRecording1 : isRecording2;
+  // Deduplicate consecutive repeated phrases or words introduced by mobile speech engines
+  function cleanDuplicatePhrases(text: string): string {
+    if (!text) return '';
+    const words = text.trim().split(/\s+/);
+    if (words.length <= 1) return text.trim();
+
+    // 1. Single word consecutive deduplication: "we we" -> "we"
+    let currentWords: string[] = [];
+    for (let i = 0; i < words.length; i++) {
+      if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
+        currentWords.push(words[i]);
+      }
+    }
+
+    // 2. Phrase consecutive deduplication from 6 down to 2 words
+    // Catches mobile speech repetition like "I recommend we delay I recommend we delay"
+    for (let phraseLen = 6; phraseLen >= 2; phraseLen--) {
+      let j = 0;
+      const deduped: string[] = [];
+      while (j < currentWords.length) {
+        if (j + phraseLen * 2 <= currentWords.length) {
+          const phrase1 = currentWords.slice(j, j + phraseLen).map(w => w.toLowerCase()).join(' ');
+          const phrase2 = currentWords.slice(j + phraseLen, j + phraseLen * 2).map(w => w.toLowerCase()).join(' ');
+          if (phrase1 === phrase2) {
+            for (let k = 0; k < phraseLen; k++) deduped.push(currentWords[j + k]);
+            j += phraseLen * 2;
+            continue;
+          }
+        }
+        deduped.push(currentWords[j]);
+        j++;
+      }
+      currentWords = deduped;
+    }
+
+    return currentWords.join(' ');
+  }
+
+  // Speech Recognition (Mobile-optimized with phrase deduplication)
+  function toggleSpeech(inputIndex: 1 | 2 | 3) {
+    const isRecording =
+      inputIndex === 1
+        ? isRecording1
+        : inputIndex === 2
+        ? isRecording2
+        : isRecordingSituation;
 
     if (isRecording) {
       stopSpeech();
       return;
     }
+
+    // Stop any existing active recording session first
+    stopSpeech();
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -319,29 +368,66 @@ export default function MyCommPalApp() {
       recognition.continuous = true;
       recognition.interimResults = true;
 
-      let finalized = '';
       const startTime = Date.now();
+      const initialText = (
+        inputIndex === 1
+          ? answer1
+          : inputIndex === 2
+          ? answer2
+          : customSituation
+      ).trim();
+      speechBaseTextRef.current = initialText;
 
-      if (inputIndex === 1) setIsRecording1(true);
-      else setIsRecording2(true);
+      if (inputIndex === 1) {
+        setIsRecording1(true);
+        setRecTimer1('00:00');
+      } else if (inputIndex === 2) {
+        setIsRecording2(true);
+        setRecTimer2('00:00');
+      } else {
+        setIsRecordingSituation(true);
+        setRecTimerSituation('00:00');
+      }
 
       timerIntervalRef.current = setInterval(() => {
         const sec = Math.floor((Date.now() - startTime) / 1000);
         const formatted = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
         if (inputIndex === 1) setRecTimer1(formatted);
-        else setRecTimer2(formatted);
+        else if (inputIndex === 2) setRecTimer2(formatted);
+        else setRecTimerSituation(formatted);
       }, 250);
 
       recognition.onresult = (event: any) => {
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const t = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalized += t + ' ';
-          else interim += t;
+        let finalTranscript = '';
+        let interimTranscript = '';
+        let lastFinalChunk = '';
+
+        // Reconstruct from 0 to results.length on each event
+        // This avoids accumulating duplicates when mobile Chrome reports resultIndex as 0 repeatedly
+        for (let i = 0; i < event.results.length; i++) {
+          const item = event.results[i];
+          const text = (item[0]?.transcript || '').trim();
+          if (!text) continue;
+
+          if (item.isFinal) {
+            if (text.toLowerCase() !== lastFinalChunk.toLowerCase()) {
+              finalTranscript += text + ' ';
+              lastFinalChunk = text;
+            }
+          } else {
+            interimTranscript += text + ' ';
+          }
         }
-        const currentSpoken = [finalized, interim].filter(Boolean).join(' ').trim();
+
+        const rawCombined = `${finalTranscript} ${interimTranscript}`.trim();
+        const cleanedSpoken = cleanDuplicatePhrases(rawCombined);
+        const currentSpoken = speechBaseTextRef.current
+          ? `${speechBaseTextRef.current} ${cleanedSpoken}`.trim()
+          : cleanedSpoken;
+
         if (inputIndex === 1) setAnswer1(currentSpoken);
-        else setAnswer2(currentSpoken);
+        else if (inputIndex === 2) setAnswer2(currentSpoken);
+        else if (inputIndex === 3) setCustomSituation(currentSpoken);
       };
 
       recognition.onerror = (e: any) => {
@@ -375,19 +461,31 @@ export default function MyCommPalApp() {
     }
     setIsRecording1(false);
     setIsRecording2(false);
+    setIsRecordingSituation(false);
   }
 
   // Assessment Step Handlers
   async function handleAssess() {
     stopSpeech();
     setApiError(null);
+
     if (scenarioMode === 'mine' && customSituation.trim().length < 15) {
-      alert('Please describe your upcoming situation in a little more detail (at least 15 characters).');
+      const sitEl = document.getElementById('mySituation');
+      if (sitEl) {
+        sitEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        sitEl.focus();
+      }
+      setApiError('Please describe your upcoming situation (at least 15 characters) above, or tap "Practice Vira’s scenario instead".');
       return;
     }
 
     if (answer1.trim().length < 35) {
-      alert('Please share a little more of your thinking (at least 35 characters) so Vira can give calibrated feedback.');
+      const ansEl = document.getElementById('answer1');
+      if (ansEl) {
+        ansEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        ansEl.focus();
+      }
+      setApiError(`Please share a little more of your thinking (${answer1.trim().length}/35 characters entered) so Vira can give calibrated feedback.`);
       return;
     }
 
@@ -416,7 +514,6 @@ export default function MyCommPalApp() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e: any) {
       setApiError(e.message || 'Something went wrong. Please retry.');
-      alert(e.message || 'Something went wrong. Please retry.');
     } finally {
       setAssessing(false);
     }
@@ -427,7 +524,12 @@ export default function MyCommPalApp() {
     stopSpeech();
     setApiError(null);
     if (answer2.trim().length < 35) {
-      alert('Please complete your retry attempt (at least 35 characters) before comparing.');
+      const ans2El = document.getElementById('answer2');
+      if (ans2El) {
+        ans2El.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        ans2El.focus();
+      }
+      setApiError(`Please complete your retry attempt (${answer2.trim().length}/35 characters entered) before comparing.`);
       return;
     }
 
@@ -884,7 +986,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               <div className="tiny">Your articulation mentor</div>
             </div>
           </div>
-          “Your ideas deserve to be heard.”
+          Your ideas deserve to be heard.
         </div>
       </aside>
 
@@ -1051,12 +1153,26 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                         Describe your upcoming situation
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className={`mic ${isRecordingSituation ? 'recording' : ''}`}
+                          style={{ width: '30px', height: '30px', fontSize: '14px', padding: 0 }}
+                          onClick={() => toggleSpeech(3)}
+                          title="Speak situation"
+                        >
+                          🎙️
+                        </button>
+                        {isRecordingSituation && <span className="counter" style={{ fontSize: '11px' }}>{recTimerSituation}</span>}
                         {customSituation.length > 0 && (
                           <button
                             type="button"
                             className="btn ghost"
                             style={{ padding: '2px 8px', fontSize: '11px', color: '#887c9c', borderRadius: '8px' }}
-                            onClick={() => setCustomSituation('')}
+                            onClick={() => {
+                              stopSpeech();
+                              setCustomSituation('');
+                              speechBaseTextRef.current = '';
+                            }}
                           >
                             🗑️ Clear
                           </button>
@@ -1115,7 +1231,11 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                       type="button"
                       className="btn ghost"
                       style={{ padding: '3px 8px', fontSize: '11.5px', color: '#887c9c', borderRadius: '8px' }}
-                      onClick={() => setAnswer1('')}
+                      onClick={() => {
+                        stopSpeech();
+                        setAnswer1('');
+                        speechBaseTextRef.current = '';
+                      }}
                     >
                       🗑️ Clear text
                     </button>
@@ -1150,14 +1270,25 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 </div>
               </div>
 
-              <div className="actions">
+              {/* Guidance banner when in 'mine' mode but situation is not filled */}
+              {scenarioMode === 'mine' && customSituation.trim().length < 15 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '12px', padding: '12px 14px', marginTop: '16px', fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <span>💡 <strong>Describe your situation above</strong> ({customSituation.trim().length}/15 chars) so Vira knows what to evaluate.</span>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    style={{ padding: '4px 10px', fontSize: '12px', background: '#ffffff', borderColor: '#fde68a', color: '#78350f', borderRadius: '8px' }}
+                    onClick={() => setScenarioMode('vira')}
+                  >
+                    ✨ Practice Vira’s scenario instead
+                  </button>
+                </div>
+              )}
+
+              <div className="actions" style={{ marginTop: '16px' }}>
                 <button
                   className="btn"
-                  disabled={
-                    assessing ||
-                    answer1.trim().length < 35 ||
-                    (scenarioMode === 'mine' && customSituation.trim().length < 15)
-                  }
+                  disabled={assessing}
                   onClick={handleAssess}
                 >
                   {assessing ? (
@@ -2144,7 +2275,11 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                         type="button"
                         className="btn ghost"
                         style={{ padding: '3px 8px', fontSize: '11.5px', color: '#887c9c', borderRadius: '8px' }}
-                        onClick={() => setAnswer2('')}
+                        onClick={() => {
+                          stopSpeech();
+                          setAnswer2('');
+                          speechBaseTextRef.current = '';
+                        }}
                       >
                         🗑️ Clear text
                       </button>
@@ -2173,7 +2308,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               <div className="actions">
                 <button
                   className="btn"
-                  disabled={comparing || answer2.trim().length < 35}
+                  disabled={comparing}
                   onClick={handleCompare}
                 >
                   {comparing ? (
