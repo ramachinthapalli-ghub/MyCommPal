@@ -40,10 +40,10 @@ const STEP_TITLES = ['My goal', 'Assess me', 'My plan', 'Practice'];
 export default function MyCommPalApp() {
   // User Authentication State
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
   
   // Login Landing Dropdown State
-  const [showLoginDropdown, setShowLoginDropdown] = useState(false);
+  const [showLoginDropdown, setShowLoginDropdown] = useState(true);
   const [activeLoginMode, setActiveLoginMode] = useState<'phone' | 'email' | null>(null);
 
   const [authIdentifier, setAuthIdentifier] = useState('');
@@ -101,6 +101,7 @@ export default function MyCommPalApp() {
     cadence: false,
   });
   const [showFullComparison, setShowFullComparison] = useState(false);
+  const [isCadenceExpanded, setIsCadenceExpanded] = useState(false);
 
   function toggleDeepDiveSection(section: string) {
     setDeepDiveSections(prev => ({
@@ -137,9 +138,10 @@ export default function MyCommPalApp() {
   const [historySessions, setHistorySessions] = useState<PracticeSessionRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Initial Auth Check
+  // Initial Auth Check: Always present login screen first when user opens the live link
   useEffect(() => {
-    checkCurrentUser();
+    setUser(null);
+    setAuthLoading(false);
   }, []);
 
   async function checkCurrentUser() {
@@ -829,7 +831,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               <div className="tiny">Your articulation mentor</div>
             </div>
           </div>
-          “No perfect answers needed. We'll make your ideas clearer, together.”
+          “Your ideas deserve to be heard.”
         </div>
       </aside>
 
@@ -958,14 +960,14 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     onClick={() => setScenarioMode('mine')}
                   >
                     <strong>✍️ Prepare me for a situation</strong>
-                    <span>Prepare for an actual conversation coming up</span>
+                    <span>Prepare me for an upcoming real conversation</span>
                   </button>
                   <button
                     type="button"
                     className={`scenario-option ${scenarioMode === 'vira' ? 'active' : ''}`}
                     onClick={() => setScenarioMode('vira')}
                   >
-                    <strong>✨ Let Vira choose</strong>
+                    <strong>✨ Let Vira give me a situation</strong>
                     <span>Practice Real PM Conversations</span>
                   </button>
                 </div>
@@ -1210,79 +1212,100 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   </div>
                 </div>
 
-                {/* 4. Your Practice Cadence & Session Selector (Placed at Meaningful Workflow Position) */}
-                <div style={{ marginTop: '20px', padding: '18px 20px', background: '#ffffff', border: '1.5px solid #ece4ff', borderRadius: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '18px' }}>📅</span>
-                      <h3 style={{ margin: 0, color: '#4338ca', fontSize: '15px' }}>
-                        Your Practice Cadence
-                      </h3>
-                    </div>
-                    <span className="tiny" style={{ background: '#f0eaff', color: '#6545e8', padding: '3px 10px', borderRadius: '10px', fontWeight: 700 }}>
-                      {planFrequency} {planFrequency === 1 ? 'session' : 'sessions'} this week · {planMinutes} min each
-                    </span>
-                  </div>
-                  <p className="tiny" style={{ margin: '0 0 14px', color: '#68607c' }}>
-                    Choose your session length and frequency to build consistent speaking habits:
-                  </p>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', margin: '0 0 14px' }}>
-                    <div>
-                      <label className="field" htmlFor="durationSelect">
-                        Session Duration
-                      </label>
-                      <select
-                        id="durationSelect"
-                        value={planMinutes}
-                        onChange={e => setPlanMinutes(Number(e.target.value))}
-                      >
-                        <option value={3}>3 minutes (quick micro-drill)</option>
-                        <option value={5}>5 minutes (recommended)</option>
-                        <option value={10}>10 minutes (deep rehearsal)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="field" htmlFor="freqSelect">
-                        Sessions This Week
-                      </label>
-                      <select
-                        id="freqSelect"
-                        value={planFrequency}
-                        onChange={e => setPlanFrequency(Number(e.target.value))}
-                      >
-                        <option value={1}>1 session</option>
-                        <option value={2}>2 sessions</option>
-                        <option value={3}>3 sessions (recommended)</option>
-                        <option value={5}>5 sessions</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="plan" style={{ marginTop: '10px' }}>
-                    {Array.from({ length: planFrequency }).map((_, i) => (
-                      <div key={i} className="day" style={i === 0 ? { border: '2px solid #7153de', background: '#fbf9ff' } : {}}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span className="tag" style={i === 0 ? { background: '#7153de', color: '#ffffff' } : {}}>
-                            {i === 0 ? '▶ Practice 1 (Now)' : `Practice ${i + 1}`}
-                          </span>
-                          <span className="tiny" style={{ color: '#887c9c', fontWeight: 600 }}>
-                            {planMinutes} min
+                {/* 4. Your Practice Cadence & Session Selector (Collapsed by Default with Recommended Options) */}
+                <div style={{ marginTop: '20px', padding: '16px 18px', background: '#ffffff', border: '1.5px solid #ece4ff', borderRadius: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '20px' }}>📅</span>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: '14.5px', color: '#2e264a' }}>
+                            Practice Cadence: {planFrequency} {planFrequency === 1 ? 'session' : 'sessions'} this week
+                          </strong>
+                          <span className="tiny" style={{ background: '#eaf8f2', color: '#16654a', padding: '2px 8px', borderRadius: '8px', fontWeight: 700 }}>
+                            {planMinutes} min each · Recommended
                           </span>
                         </div>
-                        <strong style={{ display: 'block', fontSize: '13.5px', color: '#2e264a', marginTop: '4px' }}>
-                          {i === 0 ? `Apply ${assessment.technique.name}` : i === 1 ? 'Handle Pressure Questions' : 'Fluency & Brevity Drill'}
-                        </strong>
-                        <div className="tiny" style={{ color: '#554e66', marginTop: '4px', lineHeight: 1.4 }}>
-                          {i === 0
-                            ? `Focus directly on ${assessment.focus} using ${assessment.technique.name}.`
-                            : i === 1
-                            ? 'Practice with unexpected follow-up executive questions.'
-                            : 'Rehearse with real stakeholders or peers.'}
+                        <div className="tiny" style={{ color: '#7a718c', marginTop: '2px' }}>
+                          Target: {planFrequency} practice sessions to build lasting habits · Practice 1 ready now
                         </div>
                       </div>
-                    ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      style={{ padding: '6px 12px', fontSize: '12.5px', border: '1px solid #ded5ff', color: '#5534c7' }}
+                      onClick={() => setIsCadenceExpanded(prev => !prev)}
+                    >
+                      {isCadenceExpanded ? 'Hide Options ▲' : 'Customize Cadence ▾'}
+                    </button>
                   </div>
+
+                  {/* Expanded Customizer (when user opens to modify) */}
+                  {isCadenceExpanded && (
+                    <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f2ecfe', animation: 'fadeIn 0.2s ease-out' }}>
+                      <p className="tiny" style={{ margin: '0 0 12px', color: '#68607c' }}>
+                        Modify your session duration and weekly rhythm as needed:
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', margin: '0 0 14px' }}>
+                        <div>
+                          <label className="field" htmlFor="durationSelect">
+                            Session Duration
+                          </label>
+                          <select
+                            id="durationSelect"
+                            value={planMinutes}
+                            onChange={e => setPlanMinutes(Number(e.target.value))}
+                          >
+                            <option value={3}>3 minutes (quick micro-drill)</option>
+                            <option value={5}>5 minutes (recommended)</option>
+                            <option value={10}>10 minutes (deep rehearsal)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="field" htmlFor="freqSelect">
+                            Sessions This Week
+                          </label>
+                          <select
+                            id="freqSelect"
+                            value={planFrequency}
+                            onChange={e => setPlanFrequency(Number(e.target.value))}
+                          >
+                            <option value={1}>1 session</option>
+                            <option value={2}>2 sessions</option>
+                            <option value={3}>3 sessions (recommended)</option>
+                            <option value={5}>5 sessions</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="plan" style={{ marginTop: '10px' }}>
+                        {Array.from({ length: planFrequency }).map((_, i) => (
+                          <div key={i} className="day" style={i === 0 ? { border: '2px solid #7153de', background: '#fbf9ff' } : {}}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <span className="tag" style={i === 0 ? { background: '#7153de', color: '#ffffff' } : {}}>
+                                {i === 0 ? '▶ Practice 1 (Now)' : `Practice ${i + 1}`}
+                              </span>
+                              <span className="tiny" style={{ color: '#887c9c', fontWeight: 600 }}>
+                                {planMinutes} min
+                              </span>
+                            </div>
+                            <strong style={{ display: 'block', fontSize: '13.5px', color: '#2e264a', marginTop: '4px' }}>
+                              {i === 0 ? `Apply ${assessment.technique.name}` : i === 1 ? 'Handle Pressure Questions' : 'Fluency & Brevity Drill'}
+                            </strong>
+                            <div className="tiny" style={{ color: '#554e66', marginTop: '4px', lineHeight: 1.4 }}>
+                              {i === 0
+                                ? `Focus directly on ${assessment.focus} using ${assessment.technique.name}.`
+                                : i === 1
+                                ? 'Practice with unexpected follow-up executive questions.'
+                                : 'Rehearse with real stakeholders or peers.'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Prominent Practice Action */}
