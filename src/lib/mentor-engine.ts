@@ -49,13 +49,23 @@ export function generateDynamicIllustrativeExample(
   const t = (transcript || '').toLowerCase();
   const tech = (techniqueName || '').toLowerCase();
 
-  // 1. Pricing / Monetization / Tiers
-  if (s.includes('price') || s.includes('pricing') || s.includes('monetiz') || s.includes('tier') || s.includes('billing')) {
-    return '“My recommendation is transitioning our team tier to usage-based pricing. Customer research shows 65% of small teams are blocked by our flat plan. Aligning cost with value unlocks mid-market conversion and increases expansion revenue.”';
+  // 1. Presentation / 3Ps (Purpose, Problem, Payoff)
+  if (tech.includes('3p') || goal.toLowerCase().includes('present') || s.includes('presentation') || s.includes('pitch')) {
+    if (s.includes('checkout') || s.includes('conversion') || s.includes('funnel')) {
+      return `• Purpose: “Today we are aligning on our H2 checkout optimization strategy.”\n• Problem: “Our checkout drop-off has climbed to 42%, costing an estimated $1.2M in quarterly ARR.”\n• Payoff: “By the end of this 30-minute review, we will agree on funding the streamlined checkout flow so engineering can begin next sprint.”`;
+    }
+    return `• Purpose: “The purpose of today's review is aligning on our product roadmap priorities for next quarter.”\n• Problem: “User drop-off during onboarding has reached 38%, which is capping our downstream customer expansion.”\n• Payoff: “By the end of this session, we will agree on funding the activation redesign to unlock our next growth milestone.”`;
   }
 
-  // 2. Storytelling / Journey / Career
+  // 2. Pricing / Monetization / Tiers
+  if (s.includes('price') || s.includes('pricing') || s.includes('monetiz') || s.includes('tier') || s.includes('billing')) {
+    return `• Point: “My recommendation is transitioning our team tier to usage-based pricing.”\n• Reason: “Customer research confirms that 65% of small teams are blocked by our current flat plan.”\n• Example: “In our pilot cohort, usage tiers drove a 2.4x increase in self-serve conversion within 30 days.”\n• Point: “Aligning cost with real customer value unlocks mid-market conversion and expands retention.”`;
+  }
+
+  // 3. Storytelling / Journey / Career (Hook, Journey, Reflection)
   if (
+    tech.includes('hjr') ||
+    tech.includes('hook') ||
     s.includes('journey') ||
     s.includes('career') ||
     s.includes('aspiring') ||
@@ -65,13 +75,14 @@ export function generateDynamicIllustrativeExample(
     goal.toLowerCase().includes('story')
   ) {
     if (s.includes('swimming') || t.includes('swimming') || t.includes('pool')) {
-      return '“When I transitioned into PM, I felt thrown into the deep end without knowing how to swim. The turning point was asking customers why they struggled, realizing PM is about asking better questions, not having all the answers.”';
+      return `• Hook: “When I first transitioned into PM, I felt thrown into the deep end without knowing how to swim.”\n• Journey: “In my first month, I tried to design every single solution myself until a customer interview revealed I was completely answering the wrong problem.”\n• Reflection: “That turning point taught me that PM isn't about having all the answers—it's about asking sharper questions.”`;
     }
-    return '“When I started as a PM, my biggest misconception was thinking my job was designing every detail. The turning point was shipping a feature nobody used. That failure taught me PM is really about discovering real customer problems.”';
+    return `• Hook: “When I started as a PM, my biggest misconception was thinking my job was designing every detail.”\n• Journey: “Three months in, I shipped a feature strictly on schedule that zero customers used, because I had never validated their real workflow.”\n• Reflection: “That failure taught me that PM leadership is about discovering real customer problems, not managing feature checklists.”`;
   }
 
-  // 3. Delay / Timeline / Friction / Bugs / Tech Debt
+  // 4. Delay / Timeline / Friction / Bugs / Tech Debt (DRT Framework)
   if (
+    tech.includes('drt') ||
     s.includes('delay') ||
     s.includes('timeline') ||
     s.includes('push') ||
@@ -81,12 +92,12 @@ export function generateDynamicIllustrativeExample(
     s.includes('pushed back')
   ) {
     if (s.includes('mobile') || s.includes('app')) {
-      return '“Our decision is delaying the mobile app launch by 3 weeks to fix a core authentication crash. Shipping on time with login failures creates immediate churn. Stabilizing access protects user trust, and we launch on the 24th.”';
+      return `• Decision: “Our decision is delaying the mobile app release by two weeks to fix a core authentication crash.”\n• Rationale: “Shipping on time with login crashes creates immediate negative App Store reviews and permanent churn.”\n• Trade-off: “We are consciously holding back net-new analytics to stabilize access, and we ship reliably on the 24th.”`;
     }
-    return '“Our decision is adjusting the delivery date by two weeks to resolve high-priority stability issues. While we wanted to hit this sprint, shipping with known bugs damages customer retention. Stabilizing now protects our SLA, and we ship next month.”';
+    return `• Decision: “Our decision is adjusting the delivery date by two weeks to resolve critical stability and data latency issues.”\n• Rationale: “Shipping with these known bugs damages user trust and risks breaching our enterprise SLA.”\n• Trade-off: “We are pausing secondary admin features this sprint to guarantee system reliability, and we ship next month.”`;
   }
 
-  // 4. Platform / Architecture / Migration / Capacity
+  // 5. Platform / Architecture / Migration / Capacity
   if (
     s.includes('migrat') ||
     s.includes('database') ||
@@ -94,22 +105,17 @@ export function generateDynamicIllustrativeExample(
     s.includes('infrastructure') ||
     s.includes('capacity')
   ) {
-    return '“My recommendation is allocating 40% engineering capacity to the database migration this quarter. Our peak latency has spiked 300ms, threatening enterprise SLAs. Resolving query bottlenecks protects ARR, and we resume net-new features next quarter.”';
+    return `• Point: “My recommendation is allocating 40% engineering capacity to the database migration this quarter.”\n• Reason: “Peak query latency has spiked 300ms, putting our core enterprise SLAs at immediate risk.”\n• Example: “During last week's traffic surge, database timeouts impacted 14% of customer checkout requests.”\n• Point: “Resolving this foundation now protects recurring revenue and prevents system outages before peak season.”`;
   }
 
-  // 5. Retention / Churn / Activation
+  // 6. Retention / Churn / Activation
   if (s.includes('churn') || s.includes('retention') || s.includes('activation') || s.includes('drop-off')) {
-    return '“My recommendation is focusing the sprint on the activation bottleneck rather than new integrations. Over 40% of signups stall at workspace setup. Fixing activation compounds downstream retention across all acquisition channels.”';
-  }
-
-  // 6. Presentation / Opening / Alignment
-  if (goal.toLowerCase().includes('present') || s.includes('presentation') || s.includes('pitch')) {
-    return '“Today I am presenting our H2 roadmap strategy. Our primary customer friction is checkout abandonment. By the end of this session, we will align on funding the streamlined checkout flow to drive conversion.”';
+    return `• Point: “My recommendation is focusing the sprint on the activation bottleneck rather than new integrations.”\n• Reason: “Over 40% of newly registered users drop off before completing workspace setup.”\n• Example: “Users who finish setup retain at 3x the rate of those who get stuck on team invitations.”\n• Point: “Fixing activation first compounds downstream retention across all acquisition channels.”`;
   }
 
   // 7. Explicit Onboarding vs Reporting
   if (s.includes('onboarding') && s.includes('reporting')) {
-    return '“My recommendation is prioritizing the onboarding overhaul over reporting. Data shows 42% first-week drop-off, which caps overall growth. Fixing activation compounds retention for all future users.”';
+    return `• Point: “My recommendation is prioritizing the onboarding overhaul over the reporting dashboard.”\n• Reason: “First-week activation drop-off is currently 42%, which puts a hard ceiling on total growth.”\n• Example: “Telemetry proves that fixing onboarding lifts conversion for every future cohort, whereas reporting only serves power users.”\n• Point: “Prioritizing onboarding delivers 3x more compounding customer value this quarter.”`;
   }
 
   // 8. Dynamic Custom Scenario Extraction
@@ -126,11 +132,7 @@ export function generateDynamicIllustrativeExample(
 
   const topicPhrase = cleanScenario.slice(0, 3).join(' ') || 'this strategic initiative';
 
-  if (tech.includes('bluf') || tech.includes('drt')) {
-    return `“My direct recommendation is prioritizing ${topicPhrase}. Customer telemetry indicates immediate impact on our primary success metric, and we consciously sequence secondary requests into the subsequent milestone.”`;
-  }
-
-  return `“My recommendation is prioritizing ${topicPhrase} as our main focus. Grounded in user feedback, this delivers maximum leverage for our customers while protecting core team velocity.”`;
+  return `• Point: “My recommendation is prioritizing ${topicPhrase} as our main focus.”\n• Reason: “Customer telemetry and stakeholder interviews indicate this delivers our highest leverage impact this quarter.”\n• Example: “Our recent pilot showed immediate gains in task completion and positive customer sentiment.”\n• Point: “Aligning behind ${topicPhrase} now delivers maximum customer value while protecting team velocity.”`;
 }
 
 // =========================================================================
@@ -174,14 +176,21 @@ COACHING RULES:
 1. EVIDENCE-BASED GROUND TRUTH:
    - Always cite exact verbatim quotes directly from the user's response for both strengths and areas needing improvement.
    - NEVER fabricate quotes, metrics, or personal experiences. If information is missing, tell the user what to add.
-2. INDEPENDENT ASSESSMENT:
+2. SIMPLE, JARGON-FREE LANGUAGE:
+   - Use plain, direct, conversational words.
+   - Strictly avoid corporate clichés like "lacks executive punch", "executive altitude", "gravitas", or "polish".
+   - Clearly explain WHAT was missing and HOW to fix it (e.g. "You explained the background first before stating your recommendation. State your main decision in sentence one.").
+3. FULL MULTI-PART MODEL SCRIPTS:
+   - The "contextual_example" must illustrate ALL steps of the framework step-by-step with clear bullet labels on new lines (e.g., "• Purpose: ...\n• Problem: ...\n• Payoff: ...").
+   - NEVER collapse the example into a single sentence. Show a full answer so the user can easily understand and try it.
+4. INDEPENDENT ASSESSMENT:
    - Assess each response independently on the identical rubric.
    - Do not artificially increase scores simply because a response is a retry.
    - A worse retry can and should receive a lower score.
    - Do not penalize accents, colloquialisms, or non-native grammar if the communication meaning remains clear.
-3. TRADE-OFF DETECTION:
+5. TRADE-OFF DETECTION:
    - Explicitly recognize trade-offs! For example: if clarity improved but storytelling declined because personal narrative was stripped out, declare that trade-off clearly.
-4. STRUCTURED OUTPUT:
+6. STRUCTURED OUTPUT:
    - Always respond in valid, well-formed JSON conforming strictly to the requested schema.`;
 
 // =========================================================================
@@ -348,13 +357,18 @@ Return a JSON object conforming strictly to this structure:
     { "quote": "verbatim quote <=25 words from transcript", "impact": "Why this resonated with ${audience}" }
   ],
   "improvement_areas": [
-    { "quote": "verbatim quote <=25 words from transcript", "audience_impact": "Why this matters for ${audience}", "missing_elements": ["element 1"] }
+    {
+      "quote": "verbatim quote <=25 words from transcript",
+      "audience_impact": "Explain simply what to change without jargon",
+      "better_version": "A complete, natural rewrite of the quoted sentence showing exactly what to say instead",
+      "missing_elements": ["element 1"]
+    }
   ],
   "focus_area": "clarity"|"structure"|"conciseness",
-  "focus_explanation": "Why this is their highest-leverage growth area",
+  "focus_explanation": "Why this is their highest-leverage growth area in simple words",
   "coaching_technique": "Framework Name",
   "coaching_steps": ["Step 1...", "Step 2...", "Step 3..."],
-  "contextual_example": "Tailored model script under 45 words matching user topic",
+  "contextual_example": "A complete, structured multi-part model script illustrating ALL framework steps with bullet labels on separate lines (e.g. '• Purpose: ...\\n• Problem: ...\\n• Payoff: ...'). Never collapse into a single sentence.",
   "next_exercise": {
     "title": "Next practice drill title",
     "exercise": "Specific challenge description",
@@ -402,6 +416,7 @@ Return a JSON object conforming strictly to this structure:
     const verifiedImprovements = improvements.map((im: any) => ({
       quote: verifyAndSanitizeQuote(im.quote, trimmed),
       audience_impact: im.audience_impact || `${audience} needs clearer articulation.`,
+      better_version: im.better_version || im.suggestion || '',
       missing_elements: im.missing_elements || [],
     }));
 
@@ -413,15 +428,20 @@ Return a JSON object conforming strictly to this structure:
     const primaryImprovement = verifiedImprovements[0] || {
       quote: trimmed.slice(0, 50),
       audience_impact: `${audience} expects direct clarity.`,
+      better_version: '',
       missing_elements: scenarioAnalysis.keyQuestions,
     };
 
-    // Construct highlights
+    // Construct highlights with concrete better version rewrite
+    const suggestedRewrite = primaryImprovement.better_version
+      ? `Try saying: “${primaryImprovement.better_version}”`
+      : `Try saying: “${parsed.next_exercise?.sentence_starter || 'My direct recommendation is to prioritize...'}”`;
+
     const highlights: Highlight[] = [
       {
         quote: primaryImprovement.quote,
         issue: primaryImprovement.audience_impact,
-        suggestion: `Say this instead: “${parsed.next_exercise?.sentence_starter || 'My recommendation is...'}”`,
+        suggestion: suggestedRewrite,
       },
     ];
 
@@ -1286,7 +1306,7 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
       example: generateDynamicIllustrativeExample(scenario, goal, audience, 'PREP', t),
     };
     focusExplanation =
-      'Your reasoning has substance, but organizing it into a disciplined PREP sequence will make it punchy and unmistakable to stakeholders.';
+      'Your reasoning has substance, but organizing it into a clear PREP sequence will make your main point unmistakable to stakeholders.';
     exercise =
       'Deliver your answer with PREP: Recommendation in sentence one, primary rationale, concrete observation, and reiterate the decision.';
     sentenceStarter = 'My direct recommendation is to prioritize...';
@@ -1297,11 +1317,11 @@ export function fallbackAssess(req: MentorAssessRequest): MentorAssessResponse {
       quote: needsWorkQuote,
       issue:
         focus === 'structure'
-          ? 'The transition between your premise and the final conclusion is loose, making it harder for listeners to follow your logic.'
+          ? 'You shared context before stating your main point, so listeners had to wait to understand your recommendation.'
           : focus === 'clarity'
-          ? 'Your central point is blended into background context rather than landing as a clear, authoritative headline.'
-          : 'Detailed setup took up valuable airtime before getting to the heart of the message.',
-      suggestion: `Say this instead: “${sentenceStarter}”`,
+          ? 'Your central decision was mixed into background details instead of being stated directly upfront.'
+          : 'Detailed backstory took up valuable time before reaching the core message.',
+      suggestion: `Try saying: “${sentenceStarter}”`,
     },
   ];
 

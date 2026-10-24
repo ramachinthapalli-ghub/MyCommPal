@@ -439,9 +439,39 @@ export async function saveFeedbackRecord(data: {
   // Attempt persisting directly to Supabase if client is available
   if (client) {
     try {
+      const feedbackUuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : undefined;
+
+      const payload: Record<string, any> = {
+        session_id: data.sessionId ? String(data.sessionId) : null,
+        feedback_stage: 'vira_guidance',
+        communication_goal: data.goal || null,
+        usefulness_rating: data.rating,
+        improvement_rating: data.rating,
+        liked_most: data.tags && data.tags.length > 0 ? data.tags.join(', ') : null,
+        improvement_suggestion: data.comment || null,
+        additional_comments: data.comment ? (data.focus ? `[Focus: ${data.focus}] ${data.comment}` : data.comment) : null,
+        would_use_again: data.rating >= 4,
+        created_at: now,
+      };
+
+      if (feedbackUuid) {
+        payload.id = feedbackUuid;
+      }
+
       const { data: inserted, error } = await client
         .from('user_feedback')
-        .insert({
+        .insert(payload)
+        .select()
+        .maybeSingle();
+
+      if (!error && inserted) {
+        record.id = inserted.id;
+      } else if (error) {
+        console.warn('Could not insert into user_feedback with primary schema:', error.message);
+        // Fallback: try alternative legacy column names if table schema differs
+        await client.from('user_feedback').insert({
           user_id: data.userId && data.userId !== 'anonymous' ? data.userId : null,
           session_id: data.sessionId || null,
           rating: data.rating,
@@ -451,15 +481,10 @@ export async function saveFeedbackRecord(data: {
           audience: data.audience || null,
           focus: data.focus || null,
           created_at: now,
-        })
-        .select()
-        .maybeSingle();
-
-      if (!error && inserted) {
-        record.id = inserted.id;
+        });
       }
     } catch (e: any) {
-      // Table may not exist yet, fallback to storing inside practice_sessions and memoryStore
+      // Table may not exist or network error, fallback to storing inside practice_sessions and memoryStore
       console.warn('Could not insert into user_feedback table directly:', e?.message || e);
     }
   }

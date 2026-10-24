@@ -29,7 +29,7 @@ export const CORE_SKILL_RUBRICS: Record<'clarity' | 'structure' | 'conciseness',
     levels: {
       1: 'Unclear / Incomprehensible / Echo: The main point is impossible to identify, rambles incoherently, or merely copies the prompt question without answering.',
       2: 'Buried / Vague: The listener must piece together the point. Heavy use of passive language, non-committal hedging ("we might consider looking into..."), or jargon obscures intent.',
-      3: 'Adequate: The core message is understandable upon reflection, but lacks executive punch. Key takeaway is somewhat softened by surrounding details.',
+      3: 'Understandable: The main message is understandable, but takes too long to get to the point or gets buried under extra background details.',
       4: 'Clear & Direct: The main point or recommendation is unambiguous and established early. Audience immediately grasps the intended direction.',
       5: 'Exceptional Clarity: Crystal-clear headline delivery. The listener understands the decision, stakes, and outcome effortlessly in the opening moments.',
     },
@@ -202,7 +202,7 @@ export function getShortScoreExplanation(dimension: string, score: number, goal?
     switch (clamped) {
       case 1: return 'Main message is unclear or echoes the prompt without taking a stance.';
       case 2: return 'Point is buried under hesitation, passive phrasing, or preamble.';
-      case 3: return 'Main point is understandable, but lacks immediate executive punch.';
+      case 3: return 'Main point is understandable, but takes too long to get to the point or is softened by extra details.';
       case 4: return 'Clear, direct recommendation established early with strong focus.';
       case 5: return 'Crystal-clear headline delivery with zero ambiguity or hesitation.';
     }

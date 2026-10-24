@@ -61,18 +61,19 @@ CREATE INDEX IF NOT EXISTS idx_practice_sessions_user ON public.practice_session
 -- 4. User Feedback Table (Storing user feedback on Vira guidance)
 CREATE TABLE IF NOT EXISTS public.user_feedback (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    session_id UUID REFERENCES public.practice_sessions(id) ON DELETE SET NULL,
-    rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
-    tags TEXT[] DEFAULT '{}',
-    comment TEXT,
-    goal TEXT,
-    audience TEXT,
-    focus TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    session_id TEXT,
+    feedback_stage TEXT NOT NULL DEFAULT 'vira_guidance',
+    communication_goal TEXT,
+    usefulness_rating INT CHECK (usefulness_rating >= 1 AND usefulness_rating <= 5),
+    improvement_rating INT,
+    liked_most TEXT,
+    improvement_suggestion TEXT,
+    additional_comments TEXT,
+    would_use_again BOOLEAN DEFAULT TRUE
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_feedback_rating ON public.user_feedback(rating, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_feedback_rating ON public.user_feedback(usefulness_rating, created_at DESC);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

@@ -90,6 +90,7 @@ export default function MyCommPalApp() {
   const [practice1Scores, setPractice1Scores] = useState<Scores | null>(null);
   const [practice1GoalEff, setPractice1GoalEff] = useState<GoalEffectiveness | null>(null);
   const [practice1ScnAlign, setPractice1ScnAlign] = useState<ScenarioAlignment | null>(null);
+  const [practice2Challenge, setPractice2Challenge] = useState<{ title?: string; exercise?: string; sentenceStarter?: string } | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
   // Progressive Disclosure View State
@@ -143,6 +144,25 @@ export default function MyCommPalApp() {
     setUser(null);
     setAuthLoading(false);
   }, []);
+
+  // Land user smoothly on the starting input field whenever step or scenario mode changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+
+    if (step === 1) {
+      const timer = setTimeout(() => {
+        const targetInput = scenarioMode === 'mine'
+          ? (document.getElementById('mySituation') as HTMLTextAreaElement | null)
+          : (document.getElementById('answer1') as HTMLTextAreaElement | null);
+
+        if (targetInput) {
+          targetInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targetInput.focus({ preventScroll: true });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [step, scenarioMode]);
 
   async function checkCurrentUser() {
     try {
@@ -299,7 +319,6 @@ export default function MyCommPalApp() {
       recognition.continuous = true;
       recognition.interimResults = true;
 
-      const baseText = inputIndex === 1 ? answer1 : answer2;
       let finalized = '';
       const startTime = Date.now();
 
@@ -320,9 +339,9 @@ export default function MyCommPalApp() {
           if (event.results[i].isFinal) finalized += t + ' ';
           else interim += t;
         }
-        const updated = [baseText, finalized, interim].filter(Boolean).join(' ').trim();
-        if (inputIndex === 1) setAnswer1(updated);
-        else setAnswer2(updated);
+        const currentSpoken = [finalized, interim].filter(Boolean).join(' ').trim();
+        if (inputIndex === 1) setAnswer1(currentSpoken);
+        else setAnswer2(currentSpoken);
       };
 
       recognition.onerror = (e: any) => {
@@ -458,6 +477,10 @@ export default function MyCommPalApp() {
         setPractice1ScnAlign(data.secondScenarioAlignment || null);
       }
 
+      if (data.nextChallenge) {
+        setPractice2Challenge(data.nextChallenge);
+      }
+
       setComparison(data);
       setShowFullComparison(false);
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
@@ -472,11 +495,14 @@ export default function MyCommPalApp() {
   function handlePracticeAgain() {
     stopSpeech();
     setApiError(null);
+    if (comparison?.nextChallenge) {
+      setPractice2Challenge(comparison.nextChallenge);
+    }
     // If completing Practice 1, preserve answer as Practice 1 and advance to Practice 2
     if (answer2.trim().length >= 35) {
       setPractice1Answer(answer2.trim());
-      setPracticeAttempt(2);
     }
+    setPracticeAttempt(2);
     setAnswer2('');
     setComparison(null);
     setShowFullComparison(false);
@@ -485,11 +511,13 @@ export default function MyCommPalApp() {
     setFeedbackTags([]);
     setFeedbackComment('');
     setTimeout(() => {
-      const speechArea = document.querySelector('.speech');
-      if (speechArea) {
-        speechArea.scrollIntoView({ behavior: 'smooth' });
+      const topOfStep = document.getElementById('step4-section') || document.querySelector('.main');
+      if (topOfStep) {
+        topOfStep.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    }, 50);
+    }, 60);
   }
 
   async function handleSubmitFeedback(overrideRating?: number) {
@@ -552,32 +580,51 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
       .catch(() => alert('Clipboard access unavailable.'));
   }
 
+  function startNewPracticeSession() {
+    stopSpeech();
+    setAnswer1('');
+    setAnswer2('');
+    setCustomSituation('');
+    setAssessment(null);
+    setComparison(null);
+    setPracticeAttempt(1);
+    setPractice1Answer('');
+    setPractice1Scores(null);
+    setPractice1GoalEff(null);
+    setPractice1ScnAlign(null);
+    setPractice2Challenge(null);
+    setFeedbackRating(null);
+    setFeedbackTags([]);
+    setFeedbackComment('');
+    setFeedbackSubmitted(false);
+    setApiError(null);
+    setScenarioMode('mine');
+    setStep(0);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
   function handleStartOver() {
-    if (confirm('Start a fresh practice session? Your past completed sessions remain safely stored in your history.')) {
-      setAnswer1('');
-      setAnswer2('');
-      setAssessment(null);
-      setComparison(null);
-      setFeedbackRating(null);
-      setFeedbackTags([]);
-      setFeedbackComment('');
-      setFeedbackSubmitted(false);
-      setScenarioMode('mine');
-      setStep(0);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    startNewPracticeSession();
   }
 
   function handleNextScenario() {
     setScenarioIndex(prev => prev + 1);
     setAnswer1('');
     setAnswer2('');
+    setCustomSituation('');
     setAssessment(null);
     setComparison(null);
+    setPracticeAttempt(1);
+    setPractice1Answer('');
+    setPractice1Scores(null);
+    setPractice1GoalEff(null);
+    setPractice1ScnAlign(null);
+    setPractice2Challenge(null);
     setFeedbackRating(null);
     setFeedbackTags([]);
     setFeedbackComment('');
     setFeedbackSubmitted(false);
+    setApiError(null);
     setStep(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -811,7 +858,12 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 onClick={() => {
                   if (i <= step) {
                     stopSpeech();
-                    setStep(i);
+                    if (i === 0 && (comparison || assessment || answer1 || answer2)) {
+                      startNewPracticeSession();
+                    } else {
+                      setStep(i);
+                      window.scrollTo({ top: 0, behavior: 'instant' });
+                    }
                   }
                 }}
               >
@@ -935,6 +987,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   onClick={() => {
                     setScenarioMode('mine');
                     setStep(1);
+                    window.scrollTo({ top: 0, behavior: 'instant' });
                   }}
                 >
                   Meet my challenge →
@@ -957,7 +1010,16 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   <button
                     type="button"
                     className={`scenario-option ${scenarioMode === 'mine' ? 'active' : ''}`}
-                    onClick={() => setScenarioMode('mine')}
+                    onClick={() => {
+                      setScenarioMode('mine');
+                      setTimeout(() => {
+                        const el = document.getElementById('mySituation') as HTMLTextAreaElement | null;
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          el.focus({ preventScroll: true });
+                        }
+                      }, 50);
+                    }}
                   >
                     <strong>✍️ Prepare me for a situation</strong>
                     <span>Prepare me for an upcoming real conversation</span>
@@ -965,7 +1027,16 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   <button
                     type="button"
                     className={`scenario-option ${scenarioMode === 'vira' ? 'active' : ''}`}
-                    onClick={() => setScenarioMode('vira')}
+                    onClick={() => {
+                      setScenarioMode('vira');
+                      setTimeout(() => {
+                        const el = document.getElementById('answer1') as HTMLTextAreaElement | null;
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          el.focus({ preventScroll: true });
+                        }
+                      }, 50);
+                    }}
                   >
                     <strong>✨ Let Vira give me a situation</strong>
                     <span>Practice Real PM Conversations</span>
@@ -974,13 +1045,25 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
 
                 {scenarioMode === 'mine' && (
                   <div style={{ marginTop: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                       <label className="field" htmlFor="mySituation" style={{ margin: 0 }}>
                         Describe your upcoming situation
                       </label>
-                      <span className="tiny" style={{ color: customSituation.trim().length >= 15 ? '#1f9e76' : '#887c9c', fontWeight: 600 }}>
-                        {customSituation.trim().length >= 15 ? '✓ Situation provided' : `${customSituation.trim().length}/15 chars min`}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {customSituation.length > 0 && (
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            style={{ padding: '2px 8px', fontSize: '11px', color: '#887c9c', borderRadius: '8px' }}
+                            onClick={() => setCustomSituation('')}
+                          >
+                            🗑️ Clear
+                          </button>
+                        )}
+                        <span className="tiny" style={{ color: customSituation.trim().length >= 15 ? '#1f9e76' : '#887c9c', fontWeight: 600 }}>
+                          {customSituation.trim().length >= 15 ? '✓ Situation provided' : `${customSituation.trim().length}/15 chars min`}
+                        </span>
+                      </div>
                     </div>
                     <textarea
                       id="mySituation"
@@ -1022,9 +1105,21 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   {isRecording1 && <span className="counter">{recTimer1}</span>}
                 </div>
 
-                <label className="field" htmlFor="answer1">
-                  Your baseline response
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="field" htmlFor="answer1" style={{ margin: 0 }}>
+                    Your baseline response
+                  </label>
+                  {answer1.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      style={{ padding: '3px 8px', fontSize: '11.5px', color: '#887c9c', borderRadius: '8px' }}
+                      onClick={() => setAnswer1('')}
+                    >
+                      🗑️ Clear text
+                    </button>
+                  )}
+                </div>
                 <textarea
                   id="answer1"
                   placeholder="Speak with the mic or type your answer here... (minimum 35 characters)"
@@ -1072,7 +1167,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     "Get Vira's feedback →"
                   )}
                 </button>
-                <button className="btn ghost" onClick={() => setStep(0)}>
+                <button className="btn ghost" onClick={() => {
+                  setStep(0);
+                  window.scrollTo({ top: 0, behavior: 'instant' });
+                }}>
                   ← Back to Goal
                 </button>
               </div>
@@ -1192,19 +1290,47 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   <p style={{ margin: '0 0 10px', color: '#3a3455', fontSize: '13.5px', lineHeight: 1.5 }}>
                     {assessment.focusExplanation}
                   </p>
-                  {(assessment.highlights?.[0] || assessment.evidenceCoaching?.whatNeedsWork) && (
-                    <div style={{ padding: '10px 14px', background: '#ffffff', borderRadius: '12px', border: '1px solid #eeebf8', fontSize: '13px' }}>
-                      <div style={{ color: '#7a718c', fontWeight: 600, marginBottom: '3px' }}>
-                        Audience perception from what you said:
+                  {(assessment.highlights?.[0] || assessment.evidenceCoaching?.whatNeedsWork) && (() => {
+                    const h = assessment.highlights?.[0];
+                    const originalQuote = h?.quote || assessment.evidenceCoaching?.whatNeedsWork?.quote || '';
+                    const issueDesc = h?.issue || assessment.evidenceCoaching?.whatNeedsWork?.audienceImpact || '';
+                    const rawSuggestion = h?.suggestion || `Try saying: “${assessment.technique?.steps?.[0] || 'My direct recommendation is...'}”`;
+                    const betterText = rawSuggestion.replace(/^(Say this instead|Try saying):\s*“?/i, '').replace(/”$/, '');
+
+                    if (!originalQuote) return null;
+
+                    return (
+                      <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+                          {/* Original Sentence */}
+                          <div style={{ padding: '12px 14px', background: '#fff5f5', borderRadius: '12px', border: '1.5px solid #fed7d7' }}>
+                            <div className="tiny" style={{ color: '#c53030', fontWeight: 800, textTransform: 'uppercase', marginBottom: '6px' }}>
+                              💬 Original Sentence
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#2d3748', fontStyle: 'italic', lineHeight: 1.5 }}>
+                              “{originalQuote}”
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#9b2c2c', marginTop: '8px', lineHeight: 1.4 }}>
+                              <strong>What to change:</strong> {issueDesc}
+                            </div>
+                          </div>
+
+                          {/* Better Version */}
+                          <div style={{ padding: '12px 14px', background: '#f0fdf4', borderRadius: '12px', border: '1.5px solid #bbf7d0' }}>
+                            <div className="tiny" style={{ color: '#16654a', fontWeight: 800, textTransform: 'uppercase', marginBottom: '6px' }}>
+                              💡 Clearer Version
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#14532d', fontWeight: 600, lineHeight: 1.5 }}>
+                              “{betterText}”
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#15803d', marginTop: '8px', lineHeight: 1.4 }}>
+                              <strong>Why it works:</strong> Gets straight to your recommendation without unnecessary preamble.
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="quote" style={{ margin: '4px 0 6px', fontSize: '13px', borderLeftColor: '#7153de', background: '#faf9fe' }}>
-                        “{(assessment.highlights?.[0]?.quote || assessment.evidenceCoaching?.whatNeedsWork?.quote || '').slice(0, 140)}”
-                      </div>
-                      <div style={{ color: '#5534c7', fontSize: '12.5px', fontWeight: 600 }}>
-                        ↳ {assessment.highlights?.[0]?.issue || assessment.evidenceCoaching?.whatNeedsWork?.audienceImpact}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* 3. One Relevant Technique & Concise Contextual Example */}
@@ -1222,8 +1348,8 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                       </p>
                     ))}
                   </div>
-                  <div className="quote" style={{ margin: 0, borderLeftColor: '#4f46e5', background: '#fcfaff', fontSize: '13px' }}>
-                    <strong style={{ color: '#4338ca', display: 'block', marginBottom: '4px' }}>
+                  <div className="quote" style={{ margin: 0, borderLeftColor: '#4f46e5', background: '#fcfaff', fontSize: '13px', whiteSpace: 'pre-line', lineHeight: 1.65 }}>
+                    <strong style={{ color: '#4338ca', display: 'block', marginBottom: '6px' }}>
                       💡 Tailored Model Script for Your Scenario:
                     </strong>
                     {assessment.technique.example}
@@ -1328,10 +1454,16 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
 
                 {/* Prominent Practice Action */}
                 <div className="actions" style={{ marginTop: '22px' }}>
-                  <button className="btn" onClick={() => setStep(3)} style={{ padding: '14px 28px', fontSize: '15px' }}>
+                  <button className="btn" onClick={() => {
+                    setStep(3);
+                    window.scrollTo({ top: 0, behavior: 'instant' });
+                  }} style={{ padding: '14px 28px', fontSize: '15px' }}>
                     Start Practice 1 ({planMinutes} min) →
                   </button>
-                  <button className="btn ghost" onClick={() => setStep(1)}>
+                  <button className="btn ghost" onClick={() => {
+                    setStep(1);
+                    window.scrollTo({ top: 0, behavior: 'instant' });
+                  }}>
                     ← Re-record Baseline
                   </button>
                 </div>
@@ -1758,29 +1890,56 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               <h1>One small change. A clearer message.</h1>
               <p>Apply the technique you just learned. Rehearse your answer with focus and intention.</p>
 
-              <div className="callout" style={{ borderLeft: '4px solid #7153de', background: '#f8f6ff' }}>
+              <div id="step4-section" className="callout" style={{ borderLeft: '4px solid #7153de', background: '#f8f6ff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                  <h3 style={{ margin: 0, color: '#5534c7' }}>🎯 Vira&apos;s Technique Guide: {assessment.technique.name}</h3>
-                  <span className="tag" style={{ background: '#eee8ff' }}>Focus: {assessment.focus.toUpperCase()}</span>
+                  <h3 style={{ margin: 0, color: '#5534c7' }}>
+                    {practiceAttempt === 2
+                      ? `🎯 Practice 2: ${practice2Challenge?.title || 'Targeted Follow-Up Challenge'}`
+                      : `🎯 Vira's Technique Guide: ${assessment.technique.name}`}
+                  </h3>
+                  <span className="tag" style={{ background: '#eee8ff' }}>
+                    {practiceAttempt === 2 ? 'Attempt 2 of 2' : `Focus: ${assessment.focus.toUpperCase()}`}
+                  </span>
                 </div>
 
-                <div style={{ margin: '10px 0', padding: '10px 14px', background: 'rgba(255,255,255,0.7)', borderRadius: '12px' }}>
-                  <strong style={{ fontSize: '13px', color: '#3f385c' }}>The Structure to Follow:</strong>
-                  <ul style={{ margin: '6px 0 0 18px', fontSize: '13.5px', color: '#554e66', lineHeight: 1.5 }}>
-                    {assessment.technique.steps.map((st, i) => (
-                      <li key={i}>{st}</li>
-                    ))}
-                  </ul>
-                </div>
+                {practiceAttempt === 2 ? (
+                  <div style={{ marginTop: '10px', padding: '12px 16px', background: '#ffffff', borderRadius: '12px', border: '1.5px solid #ded5ff' }}>
+                    <strong style={{ color: '#5534c7', display: 'block', marginBottom: '4px', fontSize: '14px' }}>
+                      👉 Your Practice 2 Challenge:
+                    </strong>
+                    <p style={{ margin: 0, color: '#2e1065', fontSize: '13.5px', lineHeight: 1.55 }}>
+                      {practice2Challenge?.exercise || 'Refine your rehearsal to address remaining gaps, sharpen transitions, and deliver your recommendation with certainty.'}
+                    </p>
+                    {practice2Challenge?.sentenceStarter && (
+                      <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #ded5ff', fontSize: '13px' }}>
+                        <strong style={{ color: '#6d28d9' }}>Recommended Opening:</strong>{' '}
+                        <span style={{ fontStyle: 'italic', color: '#3b0764' }}>
+                          “{practice2Challenge.sentenceStarter}”
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ margin: '10px 0', padding: '10px 14px', background: 'rgba(255,255,255,0.7)', borderRadius: '12px' }}>
+                      <strong style={{ fontSize: '13px', color: '#3f385c' }}>The Structure to Follow:</strong>
+                      <ul style={{ margin: '6px 0 0 18px', fontSize: '13.5px', color: '#554e66', lineHeight: 1.5 }}>
+                        {assessment.technique.steps.map((st, i) => (
+                          <li key={i}>{st}</li>
+                        ))}
+                      </ul>
+                    </div>
 
-                <div className="quote" style={{ margin: '10px 0', borderLeftColor: '#7153de' }}>
-                  <strong style={{ display: 'block', marginBottom: '4px', color: '#6545e8' }}>💡 Illustrative Model Script:</strong>
-                  {assessment.technique.example}
-                </div>
+                    <div className="quote" style={{ margin: '10px 0', borderLeftColor: '#7153de', whiteSpace: 'pre-line', lineHeight: 1.65 }}>
+                      <strong style={{ display: 'block', marginBottom: '4px', color: '#6545e8' }}>💡 Illustrative Model Script:</strong>
+                      {assessment.technique.example}
+                    </div>
 
-                <div style={{ marginTop: '12px', padding: '10px 14px', background: '#f1ebff', borderRadius: '12px', fontSize: '13.5px' }}>
-                  <strong style={{ color: '#5534c7' }}>👉 Your Guided Mission:</strong> {assessment.exercise}
-                </div>
+                    <div style={{ marginTop: '12px', padding: '10px 14px', background: '#f1ebff', borderRadius: '12px', fontSize: '13.5px' }}>
+                      <strong style={{ color: '#5534c7' }}>👉 Your Guided Mission:</strong> {assessment.exercise}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Retry Speech / Text Input */}
@@ -1800,13 +1959,25 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   {isRecording2 && <span className="counter">{recTimer2}</span>}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                   <label className="field" htmlFor="answer2" style={{ margin: 0 }}>
                     {practiceAttempt === 2 ? 'Practice 2 Rehearsal' : 'Practice 1 Rehearsal'}
                   </label>
-                  <span className="tag" style={{ background: '#eee8ff', fontSize: '11px', fontWeight: 700, color: '#5534c7' }}>
-                    {practiceAttempt === 2 ? 'Attempt 2 of 2' : 'Attempt 1 of 2'}
-                  </span>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {answer2.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        style={{ padding: '3px 8px', fontSize: '11.5px', color: '#887c9c', borderRadius: '8px' }}
+                        onClick={() => setAnswer2('')}
+                      >
+                        🗑️ Clear text
+                      </button>
+                    )}
+                    <span className="tag" style={{ background: '#eee8ff', fontSize: '11px', fontWeight: 700, color: '#5534c7' }}>
+                      {practiceAttempt === 2 ? 'Attempt 2 of 2' : 'Attempt 1 of 2'}
+                    </span>
+                  </div>
                 </div>
                 <div className="small" style={{ color: '#7a718c', marginBottom: '8px' }}>
                   {practiceAttempt === 2
@@ -1840,7 +2011,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                     'Compare my answers →'
                   )}
                 </button>
-                <button className="btn ghost" onClick={() => setStep(2)}>
+                <button className="btn ghost" onClick={() => {
+                  setStep(2);
+                  window.scrollTo({ top: 0, behavior: 'instant' });
+                }}>
                   ← Review Technique
                 </button>
               </div>
@@ -1949,7 +2123,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                           onClick={handlePracticeAgain}
                           style={{ padding: '10px 18px', fontSize: '13px', whiteSpace: 'nowrap' }}
                         >
-                          Practice Again ↺
+                          {practiceAttempt === 1 ? 'Start Practice 2 Rehearsal →' : 'Practice Again ↺'}
                         </button>
                       </div>
                     </div>
