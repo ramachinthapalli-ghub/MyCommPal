@@ -457,9 +457,9 @@ export default function MyCommPalApp() {
       }
     }
 
-    // 2. Phrase consecutive deduplication from 6 down to 2 words
-    // Catches mobile speech repetition like "I recommend we delay I recommend we delay"
-    for (let phraseLen = 6; phraseLen >= 2; phraseLen--) {
+    // 2. Phrase consecutive deduplication from 15 down to 2 words
+    // Catches mobile speech repetition like "I am trying to get into a situation I am trying to get into a situation"
+    for (let phraseLen = 15; phraseLen >= 2; phraseLen--) {
       let j = 0;
       const deduped: string[] = [];
       while (j < currentWords.length) {
@@ -555,30 +555,92 @@ export default function MyCommPalApp() {
       recognition.interimResults = true;
 
       recognition.onresult = (event: any) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-        let lastFinalChunk = '';
+        // Collect progressive segments from event.results
+        // Mobile Chrome/Brave frequently emits incremental supersets (e.g. "A", "A B", "A B C")
+        // where each result contains the previous result as a prefix.
+        const segments: string[] = [];
 
         for (let i = 0; i < event.results.length; i++) {
           const item = event.results[i];
           const text = (item[0]?.transcript || '').trim();
           if (!text) continue;
 
-          if (item.isFinal) {
-            if (text.toLowerCase() !== lastFinalChunk.toLowerCase()) {
-              finalTranscript += text + ' ';
-              lastFinalChunk = text;
+          if (segments.length > 0) {
+            const last = segments[segments.length - 1];
+            const lastLower = last.toLowerCase();
+            const textLower = text.toLowerCase();
+
+            // 1. If text starts with last, text is an expanded replacement of last!
+            if (textLower.startsWith(lastLower)) {
+              segments[segments.length - 1] = text;
+              continue;
             }
+
+            // 2. If last starts with text, last was already more complete
+            if (lastLower.startsWith(textLower)) {
+              continue;
+            }
+
+            // 3. Word-level overlap detection: if text begins with the tail of last
+            const lastWords = last.split(/\s+/);
+            const textWords = text.split(/\s+/);
+            let overlapCount = 0;
+            for (let k = Math.min(lastWords.length, textWords.length, 12); k >= 1; k--) {
+              const lastTail = lastWords.slice(-k).join(' ').toLowerCase();
+              const textHead = textWords.slice(0, k).join(' ').toLowerCase();
+              if (lastTail === textHead) {
+                overlapCount = k;
+                break;
+              }
+            }
+            if (overlapCount > 0) {
+              const newWords = textWords.slice(overlapCount);
+              if (newWords.length > 0) {
+                segments.push(newWords.join(' '));
+              }
+              continue;
+            }
+          }
+
+          segments.push(text);
+        }
+
+        const rawCombined = segments.join(' ').trim();
+        const cleanedSpoken = cleanDuplicatePhrases(rawCombined);
+
+        // Merge cleanly with speechBaseTextRef (handling any overlap between restart sessions)
+        let currentSpoken = cleanedSpoken;
+        const base = speechBaseTextRef.current.trim();
+        if (base) {
+          const baseLower = base.toLowerCase();
+          const spokenLower = cleanedSpoken.toLowerCase();
+
+          if (spokenLower.startsWith(baseLower)) {
+            currentSpoken = cleanedSpoken;
+          } else if (baseLower.endsWith(spokenLower)) {
+            currentSpoken = base;
           } else {
-            interimTranscript += text + ' ';
+            // Check word overlap at boundary
+            const baseWords = base.split(/\s+/);
+            const spokenWords = cleanedSpoken.split(/\s+/);
+            let boundaryOverlap = 0;
+            for (let k = Math.min(baseWords.length, spokenWords.length, 12); k >= 1; k--) {
+              const baseEnd = baseWords.slice(-k).join(' ').toLowerCase();
+              const spokenStart = spokenWords.slice(0, k).join(' ').toLowerCase();
+              if (baseEnd === spokenStart) {
+                boundaryOverlap = k;
+                break;
+              }
+            }
+            if (boundaryOverlap > 0) {
+              currentSpoken = `${base} ${spokenWords.slice(boundaryOverlap).join(' ')}`.trim();
+            } else {
+              currentSpoken = `${base} ${cleanedSpoken}`.trim();
+            }
           }
         }
 
-        const rawCombined = `${finalTranscript} ${interimTranscript}`.trim();
-        const cleanedSpoken = cleanDuplicatePhrases(rawCombined);
-        const currentSpoken = speechBaseTextRef.current
-          ? `${speechBaseTextRef.current} ${cleanedSpoken}`.trim()
-          : cleanedSpoken;
+        currentSpoken = cleanDuplicatePhrases(currentSpoken);
 
         if (inputIndex === 1) {
           setAnswer1(currentSpoken);
@@ -1147,25 +1209,24 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
   // =========================================================================
   // VIEW 2: AUTHENTICATED APP (Full 4-Screen HTML Prototype Flow)
   // =========================================================================
-  // Practice session completed if user finished a retry comparison in current session OR has past completed practice sessions
-  const completedPracticeHistoryCount = historySessions.filter(
+  // Filter verified completed practice sessions (where retry was submitted and evaluated)
+  const completedPracticeHistory = historySessions.filter(
     s => s.comparison || s.retryScores || (s.retryTranscript && s.retryTranscript.length >= 35)
-  ).length;
+  );
 
-  const hasCompletedPracticeSession =
-    comparison !== null ||
-    completedPracticeHistoryCount > 0 ||
-    (streakData.totalSessions > 0 && typeof window !== 'undefined' && localStorage.getItem('mycommpal_practice_completed') === 'true');
+  const totalCompletedSessions = Math.max(
+    completedPracticeHistory.length,
+    streakData.totalSessions || 0,
+    comparison ? 1 : 0
+  );
 
-  // Dynamic progress based on practice guidance config
-  const daysPracticedThisWeek = [0, 1, 2, 3, 4, 5, 6].filter(dayIdx =>
-    isDayActiveThisWeek(dayIdx, streakData.historyDates)
-  ).length;
-  const currentWeekCompleted = Math.max(daysPracticedThisWeek, comparison ? 1 : 0);
-  const weeklyTarget = planFrequency || 3;
+  const hasCompletedPracticeSession = totalCompletedSessions > 0;
+
+  // Dynamic practice guidance target config (No days, strictly sessions)
+  const targetSessions = planFrequency || 3;
   const sessionDuration = planMinutes || 5;
-  const weeklyProgressPercent = Math.min(100, Math.round((currentWeekCompleted / weeklyTarget) * 100));
-  const remainingInTarget = Math.max(0, weeklyTarget - currentWeekCompleted);
+  const progressPercent = Math.min(100, Math.round((totalCompletedSessions / targetSessions) * 100));
+  const remainingInTarget = Math.max(0, targetSessions - totalCompletedSessions);
 
   return (
     <div className="shell">
@@ -1207,34 +1268,34 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
           })}
         </div>
 
-        {/* Practice Streak Card (Shown ONLY when user has completed at least one practice session) */}
+        {/* Practice Sessions Card (Shown ONLY when user has completed at least one practice session) */}
         {hasCompletedPracticeSession && (
           <div className="sidebar-streak-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1b54' }}>
-                🔥 Practice Streak
+                🔥 Practice Sessions
               </span>
               <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#7c3aed' }}>
-                {streakData.currentStreak} Day{streakData.currentStreak === 1 ? '' : 's'}
+                {totalCompletedSessions} {totalCompletedSessions === 1 ? 'Session' : 'Sessions'}
               </span>
             </div>
 
-            {/* Dynamic Guidance Rhythm Config */}
+            {/* Dynamic Target Guidance */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
               <span className="tiny" style={{ color: '#7b7194' }}>
-                Weekly Target: <strong>{weeklyTarget} reps</strong> ({sessionDuration}m)
+                Target: <strong>{targetSessions} {targetSessions === 1 ? 'session' : 'sessions'}</strong> ({sessionDuration}m each)
               </span>
-              <span className="tiny" style={{ color: currentWeekCompleted >= weeklyTarget ? '#059669' : '#6d28d9', fontWeight: 700 }}>
-                {currentWeekCompleted}/{weeklyTarget}
+              <span className="tiny" style={{ color: totalCompletedSessions >= targetSessions ? '#059669' : '#6d28d9', fontWeight: 700 }}>
+                {totalCompletedSessions}/{targetSessions}
               </span>
             </div>
 
             {/* Dynamic Progress Bar */}
-            <div style={{ background: '#ede7fb', borderRadius: '6px', height: '5px', overflow: 'hidden', margin: '4px 0 8px' }}>
+            <div style={{ background: '#ede7fb', borderRadius: '6px', height: '6px', overflow: 'hidden', margin: '4px 0 8px' }}>
               <div
                 style={{
-                  width: `${weeklyProgressPercent}%`,
-                  background: currentWeekCompleted >= weeklyTarget
+                  width: `${progressPercent}%`,
+                  background: totalCompletedSessions >= targetSessions
                     ? 'linear-gradient(90deg, #10b981, #059669)'
                     : 'linear-gradient(90deg, #7c3aed, #4f46e5)',
                   height: '100%',
@@ -1244,31 +1305,74 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
               />
             </div>
 
-            <div className="streak-week-grid">
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => {
-                const active = isDayActiveThisWeek(idx, streakData.historyDates);
+            {/* Session Rep Badges (No days!) */}
+            <div className="sidebar-session-pills">
+              {Array.from({ length: targetSessions }).map((_, idx) => {
+                const isDone = idx < totalCompletedSessions;
                 return (
-                  <div key={idx} className={`streak-day ${active ? 'done' : ''}`}>
-                    <span>{day}</span>
-                    <span className="streak-dot">{active ? '✓' : '·'}</span>
-                  </div>
+                  <span key={idx} className={`sidebar-rep-pill ${isDone ? 'done' : ''}`}>
+                    <span>Rep {idx + 1}</span>
+                    <span>{isDone ? '✓' : '·'}</span>
+                  </span>
                 );
               })}
             </div>
 
-            <div className="tiny" style={{ color: '#554e66', margin: '4px 0 8px', fontSize: '11px', textAlign: 'center' }}>
-              {currentWeekCompleted >= weeklyTarget
-                ? `🎉 Weekly cadence met! (${weeklyTarget} of ${weeklyTarget})`
-                : `🎯 ${remainingInTarget} more ${remainingInTarget === 1 ? 'rep' : 'reps'} to hit your ${weeklyTarget}-day target`}
+            <div className="tiny" style={{ color: '#554e66', margin: '4px 0 10px', fontSize: '11px' }}>
+              {totalCompletedSessions >= targetSessions
+                ? `🎉 Target reached! (${totalCompletedSessions} completed)`
+                : `🎯 ${remainingInTarget} more ${remainingInTarget === 1 ? 'session' : 'sessions'} to complete your ${targetSessions}-session goal`}
+            </div>
+
+            {/* Completed Sessions Display Under Streak Section */}
+            <div className="sidebar-completed-sessions">
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#3f355c', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Completed Practice Sessions</span>
+                <span className="tiny" style={{ color: '#7c3aed', fontWeight: 700 }}>{totalCompletedSessions}</span>
+              </div>
+
+              {/* If current session was just completed, show it */}
+              {comparison && (
+                <div className="sidebar-session-item" style={{ background: '#f5f3ff', borderColor: '#ded5ff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '11px', color: '#4338ca' }}>
+                      Current · {assessment?.focus || 'Articulation'}
+                    </strong>
+                    <span className="tiny-badge improved">✓ Just completed</span>
+                  </div>
+                  <div className="tiny" style={{ color: '#554e66', marginTop: '2px' }}>
+                    Score lift: {assessment?.scores[assessment.focus] || 3}/5 → {comparison.focusAfter}/5
+                  </div>
+                </div>
+              )}
+
+              {/* Past Completed Sessions List */}
+              {completedPracticeHistory.slice(0, 3).map((s, idx) => (
+                <div key={s.id || idx} className="sidebar-session-item">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '11px', color: '#1e1633' }}>
+                      {s.goal || 'Practice'} · {s.focusSkill || 'Clarity'}
+                    </strong>
+                    {s.comparison?.verdict && (
+                      <span className={`tiny-badge ${s.comparison.verdict === 'improved' ? 'improved' : ''}`}>
+                        {s.comparison.verdict === 'improved' ? '✓ Improved' : 'Similar'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="tiny" style={{ color: '#7a718c', marginTop: '2px' }}>
+                    Score: {s.baselineScores?.[s.focusSkill as keyof Scores] || 3}/5 → {s.retryScores?.[s.focusSkill as keyof Scores] || s.comparison?.focusAfter || '4'}/5
+                  </div>
+                </div>
+              ))}
             </div>
 
             <button
               type="button"
               className="btn ghost"
-              style={{ width: '100%', padding: '4px 0', fontSize: '11px', color: '#6d28d9', textAlign: 'center' }}
+              style={{ width: '100%', padding: '6px 0', fontSize: '11px', color: '#6d28d9', textAlign: 'center', marginTop: '8px' }}
               onClick={loadHistory}
             >
-              📜 View Practice History
+              📜 View Full Practice History ({totalCompletedSessions})
             </button>
           </div>
         )}
@@ -1290,7 +1394,12 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
       <main className="main">
         {/* Top Header Bar */}
         <div className="top">
-          <span className="eyebrow">PRACTICE WITH VIRA · SPEAK WITH IMPACT</span>
+          <div className="top-branding">
+            <span className="brand-pill">🎯 MyCommPal</span>
+            <span className="tagline">
+              AI Communication Coach for Product Managers · Turn unstructured thoughts into executive recommendations
+            </span>
+          </div>
           <div className="top-actions">
             {user && (
               <>
@@ -1317,6 +1426,31 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                 Meet Vira, your personal AI communication mentor. Practice realistic product management conversations,
                 get targeted feedback, and strengthen your articulation one session at a time.
               </p>
+
+              {/* Clear 3-Pillar Value Proposition */}
+              <div className="how-it-works-strip">
+                <div className="how-it-works-card">
+                  <span className="how-icon">🎙️</span>
+                  <div>
+                    <strong>1. Realistic PM Scenarios</strong>
+                    <p>Practice high-stakes pushback, trade-offs, roadmap delays, or your own upcoming meeting.</p>
+                  </div>
+                </div>
+                <div className="how-it-works-card">
+                  <span className="how-icon">👩‍💼</span>
+                  <div>
+                    <strong>2. Calibrated Feedback</strong>
+                    <p>Instant scoring on Clarity, Structure, Conciseness, Decision Logic & Trade-off articulation.</p>
+                  </div>
+                </div>
+                <div className="how-it-works-card">
+                  <span className="how-icon">📈</span>
+                  <div>
+                    <strong>3. Guided Rehearsal</strong>
+                    <p>Apply calibrated PM frameworks (DETI, PREP) and measure before/after score lift.</p>
+                  </div>
+                </div>
+              </div>
 
               <div className="vira">
                 <span className="avatar">👩‍💼</span>
@@ -1796,7 +1930,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <strong style={{ fontSize: '14.5px', color: '#2e264a' }}>
-                            Practice Cadence: {planFrequency} {planFrequency === 1 ? 'session' : 'sessions'} this week
+                            Practice Cadence: {planFrequency} {planFrequency === 1 ? 'session' : 'sessions'}
                           </strong>
                           <span className="tiny" style={{ background: '#eaf8f2', color: '#16654a', padding: '2px 8px', borderRadius: '8px', fontWeight: 700 }}>
                             {planMinutes} min each · Recommended
@@ -1822,7 +1956,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   {isCadenceExpanded && (
                     <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f2ecfe', animation: 'fadeIn 0.2s ease-out' }}>
                       <p className="tiny" style={{ margin: '0 0 12px', color: '#68607c' }}>
-                        Modify your session duration and weekly rhythm as needed:
+                        Modify your session duration and target number of sessions as needed:
                       </p>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', margin: '0 0 14px' }}>
                         <div>
@@ -1841,7 +1975,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                         </div>
                         <div>
                           <label className="field" htmlFor="freqSelect">
-                            Sessions This Week
+                            Number of sessions
                           </label>
                           <select
                             id="freqSelect"
@@ -2380,7 +2514,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                         </div>
                         <div>
                           <label className="field" htmlFor="freqSelect">
-                            Sessions This Week
+                            Number of sessions
                           </label>
                           <select
                             id="freqSelect"
