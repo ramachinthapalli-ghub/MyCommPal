@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { UserProfile, PracticeSessionRecord, Scores, Highlight, Technique, MentorCompareResponse } from './types';
+import { UserProfile, PracticeSessionRecord, UserFeedbackRecord, Scores, Highlight, Technique, MentorCompareResponse } from './types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -62,6 +62,7 @@ interface MemoryStore {
   profiles: Map<string, UserProfile>;
   otps: Map<string, { code: string; expiresAt: number; used: boolean }>;
   sessions: Map<string, PracticeSessionRecord>;
+  feedbacks: Map<string, UserFeedbackRecord>;
 }
 
 const globalForMemory = globalThis as unknown as { __memoryStore?: MemoryStore };
@@ -69,6 +70,7 @@ const memoryStore: MemoryStore = globalForMemory.__memoryStore || {
   profiles: new Map(),
   otps: new Map(),
   sessions: new Map(),
+  feedbacks: new Map(),
 };
 if (process.env.NODE_ENV !== 'production') globalForMemory.__memoryStore = memoryStore;
 
@@ -405,4 +407,76 @@ export async function updateSessionFeedback(sessionId: string, feedback: {
     return true;
   }
   return false;
+}
+
+export async function saveFeedbackRecord(data: {
+  userId: string;
+  sessionId?: string | null;
+  rating: number;
+  tags?: string[];
+  comment?: string;
+  goal?: string;
+  audience?: string;
+  focus?: string;
+}): Promise<UserFeedbackRecord> {
+  const client = getSupabaseServerClient();
+  const now = new Date().toISOString();
+  const id = `fb_${Math.random().toString(36).substring(2, 11)}`;
+
+  const record: UserFeedbackRecord = {
+    id,
+    userId: data.userId,
+    sessionId: data.sessionId || null,
+    rating: data.rating,
+    tags: data.tags || [],
+    comment: data.comment || '',
+    goal: data.goal,
+    audience: data.audience,
+    focus: data.focus,
+    createdAt: now,
+  };
+
+  // Attempt persisting directly to Supabase if client is available
+  if (client) {
+    try {
+      const { data: inserted, error } = await client
+        .from('user_feedback')
+        .insert({
+          user_id: data.userId && data.userId !== 'anonymous' ? data.userId : null,
+          session_id: data.sessionId || null,
+          rating: data.rating,
+          tags: data.tags || [],
+          comment: data.comment || '',
+          goal: data.goal || null,
+          audience: data.audience || null,
+          focus: data.focus || null,
+          created_at: now,
+        })
+        .select()
+        .maybeSingle();
+
+      if (!error && inserted) {
+        record.id = inserted.id;
+      }
+    } catch (e: any) {
+      // Table may not exist yet, fallback to storing inside practice_sessions and memoryStore
+      console.warn('Could not insert into user_feedback table directly:', e?.message || e);
+    }
+  }
+
+  // Store in memoryStore and log
+  memoryStore.feedbacks.set(record.id, record);
+  console.log('[User Feedback Saved]', {
+    id: record.id,
+    rating: record.rating,
+    tags: record.tags,
+    comment: record.comment,
+    sessionId: record.sessionId,
+    userId: record.userId,
+    goal: record.goal,
+    focus: record.focus,
+    createdAt: now,
+  });
+
+  return record;
 }

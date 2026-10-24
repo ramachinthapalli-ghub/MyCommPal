@@ -304,3 +304,16 @@ export interface PracticeSessionRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface UserFeedbackRecord {
+  id: string;
+  userId: string;
+  sessionId?: string | null;
+  rating: number;
+  tags: string[];
+  comment: string;
+  goal?: string;
+  audience?: string;
+  focus?: string;
+  createdAt: string;
+}

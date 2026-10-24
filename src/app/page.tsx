@@ -416,6 +416,7 @@ export default function MyCommPalApp() {
       setComparing(true);
       const requestPayload: any = {
         mode: 'compare',
+        userId: user?.id,
         goal,
         audience,
         scenario: currentScenarioText,
@@ -489,8 +490,9 @@ export default function MyCommPalApp() {
     }, 50);
   }
 
-  async function handleSubmitFeedback() {
-    if (!feedbackRating) return;
+  async function handleSubmitFeedback(overrideRating?: number) {
+    const ratingToSubmit = overrideRating || feedbackRating;
+    if (!ratingToSubmit) return;
     try {
       setFeedbackSubmitting(true);
       await fetch('/api/sessions/feedback', {
@@ -498,15 +500,23 @@ export default function MyCommPalApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: comparison?.savedSessionId,
-          rating: feedbackRating,
+          userId: user?.id,
+          goal,
+          audience,
+          focus: assessment?.focus,
+          rating: ratingToSubmit,
           tags: feedbackTags,
           comment: feedbackComment.trim(),
         }),
       });
-      setFeedbackSubmitted(true);
+      if (!overrideRating) {
+        setFeedbackSubmitted(true);
+      }
     } catch (e) {
       console.error('Failed to submit feedback:', e);
-      setFeedbackSubmitted(true);
+      if (!overrideRating) {
+        setFeedbackSubmitted(true);
+      }
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -1200,10 +1210,85 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                   </div>
                 </div>
 
+                {/* 4. Your Practice Cadence & Session Selector (Placed at Meaningful Workflow Position) */}
+                <div style={{ marginTop: '20px', padding: '18px 20px', background: '#ffffff', border: '1.5px solid #ece4ff', borderRadius: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>📅</span>
+                      <h3 style={{ margin: 0, color: '#4338ca', fontSize: '15px' }}>
+                        Your Practice Cadence
+                      </h3>
+                    </div>
+                    <span className="tiny" style={{ background: '#f0eaff', color: '#6545e8', padding: '3px 10px', borderRadius: '10px', fontWeight: 700 }}>
+                      {planFrequency} {planFrequency === 1 ? 'session' : 'sessions'} this week · {planMinutes} min each
+                    </span>
+                  </div>
+                  <p className="tiny" style={{ margin: '0 0 14px', color: '#68607c' }}>
+                    Choose your session length and frequency to build consistent speaking habits:
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', margin: '0 0 14px' }}>
+                    <div>
+                      <label className="field" htmlFor="durationSelect">
+                        Session Duration
+                      </label>
+                      <select
+                        id="durationSelect"
+                        value={planMinutes}
+                        onChange={e => setPlanMinutes(Number(e.target.value))}
+                      >
+                        <option value={3}>3 minutes (quick micro-drill)</option>
+                        <option value={5}>5 minutes (recommended)</option>
+                        <option value={10}>10 minutes (deep rehearsal)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field" htmlFor="freqSelect">
+                        Sessions This Week
+                      </label>
+                      <select
+                        id="freqSelect"
+                        value={planFrequency}
+                        onChange={e => setPlanFrequency(Number(e.target.value))}
+                      >
+                        <option value={1}>1 session</option>
+                        <option value={2}>2 sessions</option>
+                        <option value={3}>3 sessions (recommended)</option>
+                        <option value={5}>5 sessions</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="plan" style={{ marginTop: '10px' }}>
+                    {Array.from({ length: planFrequency }).map((_, i) => (
+                      <div key={i} className="day" style={i === 0 ? { border: '2px solid #7153de', background: '#fbf9ff' } : {}}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span className="tag" style={i === 0 ? { background: '#7153de', color: '#ffffff' } : {}}>
+                            {i === 0 ? '▶ Practice 1 (Now)' : `Practice ${i + 1}`}
+                          </span>
+                          <span className="tiny" style={{ color: '#887c9c', fontWeight: 600 }}>
+                            {planMinutes} min
+                          </span>
+                        </div>
+                        <strong style={{ display: 'block', fontSize: '13.5px', color: '#2e264a', marginTop: '4px' }}>
+                          {i === 0 ? `Apply ${assessment.technique.name}` : i === 1 ? 'Handle Pressure Questions' : 'Fluency & Brevity Drill'}
+                        </strong>
+                        <div className="tiny" style={{ color: '#554e66', marginTop: '4px', lineHeight: 1.4 }}>
+                          {i === 0
+                            ? `Focus directly on ${assessment.focus} using ${assessment.technique.name}.`
+                            : i === 1
+                            ? 'Practice with unexpected follow-up executive questions.'
+                            : 'Rehearse with real stakeholders or peers.'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Prominent Practice Action */}
-                <div className="actions" style={{ marginTop: '20px' }}>
+                <div className="actions" style={{ marginTop: '22px' }}>
                   <button className="btn" onClick={() => setStep(3)} style={{ padding: '14px 28px', fontSize: '15px' }}>
-                    Practice this technique now →
+                    Start Practice 1 ({planMinutes} min) →
                   </button>
                   <button className="btn ghost" onClick={() => setStep(1)}>
                     ← Re-record Baseline
@@ -1984,7 +2069,10 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                               type="button"
                               className={`btn ${feedbackRating === item.score ? '' : 'ghost'}`}
                               style={{ padding: '8px 12px', fontSize: '12.5px', borderRadius: '10px' }}
-                              onClick={() => setFeedbackRating(item.score)}
+                              onClick={() => {
+                                setFeedbackRating(item.score);
+                                handleSubmitFeedback(item.score);
+                              }}
                             >
                               {item.label}
                             </button>
@@ -2039,7 +2127,7 @@ ${comparison?.whatImproved || 'Applied calibrated structure technique.'}${feedba
                               type="button"
                               className="btn secondary"
                               style={{ padding: '8px 18px', fontSize: '13px' }}
-                              onClick={handleSubmitFeedback}
+                              onClick={() => handleSubmitFeedback()}
                               disabled={feedbackSubmitting}
                             >
                               {feedbackSubmitting ? 'Saving...' : 'Submit Feedback'}

@@ -58,12 +58,30 @@ CREATE TABLE IF NOT EXISTS public.practice_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_practice_sessions_user ON public.practice_sessions(user_id, created_at DESC);
 
+-- 4. User Feedback Table (Storing user feedback on Vira guidance)
+CREATE TABLE IF NOT EXISTS public.user_feedback (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    session_id UUID REFERENCES public.practice_sessions(id) ON DELETE SET NULL,
+    rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    tags TEXT[] DEFAULT '{}',
+    comment TEXT,
+    goal TEXT,
+    audience TEXT,
+    focus TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_feedback_rating ON public.user_feedback(rating, created_at DESC);
+
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.auth_otps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.practice_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_feedback ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read/write through server-side / anon role with appropriate access
 CREATE POLICY "Allow public profile operations" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public auth_otps operations" ON public.auth_otps FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public practice_sessions operations" ON public.practice_sessions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public user_feedback operations" ON public.user_feedback FOR ALL USING (true) WITH CHECK (true);

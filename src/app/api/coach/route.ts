@@ -4,7 +4,7 @@ import {
   runMentorCompare,
   runMentorNextPractice,
 } from '@/lib/mentor-engine';
-import { savePracticeSession } from '@/lib/supabase';
+import { savePracticeSession, getOrCreateProfile } from '@/lib/supabase';
 import {
   MentorAssessRequest,
   MentorCompareRequest,
@@ -47,14 +47,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const mode = body.mode || body.operation;
 
-    // Read user from cookie if available
-    let userId = 'anonymous';
-    const userCookie = req.cookies.get('mycommpal_user')?.value;
-    if (userCookie) {
-      try {
-        const u = JSON.parse(userCookie);
-        if (u.id) userId = u.id;
-      } catch (e) {}
+    // Read user from body or cookie
+    let userId = (body as any).userId || 'anonymous';
+    if (userId === 'anonymous') {
+      const userCookie = req.cookies.get('mycommpal_user')?.value;
+      if (userCookie) {
+        try {
+          const u = JSON.parse(userCookie);
+          if (u.id) userId = u.id;
+        } catch (e) {}
+      }
     }
 
     // 1. OPERATION: ASSESS
@@ -147,28 +149,32 @@ export async function POST(req: NextRequest) {
 
       // Persist the full session to database
       let savedSession = null;
-      if (userId && userId !== 'anonymous') {
-        try {
-          savedSession = await savePracticeSession({
-            userId,
-            goal: goal || 'Articulation',
-            audience: audience || 'Cross-functional stakeholders',
-            scenarioMode: scenarioMode || 'vira',
-            scenarioText: scenario || '',
-            baselineTranscript: firstTranscript || '',
-            baselineScores: firstScores || { clarity: 2, structure: 2, conciseness: 2 },
-            focusSkill: focus || 'structure',
-            focusExplanation: assessment?.focusExplanation || '',
-            highlights: assessment?.highlights || [],
-            technique: assessment?.technique || { name: 'Framework', steps: [], example: '' },
-            practicePlan: practicePlan || { minutes: 5, frequency: 3 },
-            retryTranscript: trimmedTarget,
-            retryScores: comparison.secondScores,
-            comparison,
-          });
-        } catch (dbErr) {
-          console.warn('Session persistence error:', dbErr);
+      try {
+        let sessionUserId = userId;
+        if (!sessionUserId || sessionUserId === 'anonymous') {
+          const guestProfile = await getOrCreateProfile('guest', `guest_${Math.floor(1000 + Math.random() * 9000)}`);
+          sessionUserId = guestProfile.id;
         }
+
+        savedSession = await savePracticeSession({
+          userId: sessionUserId,
+          goal: goal || 'Articulation',
+          audience: audience || 'Cross-functional stakeholders',
+          scenarioMode: scenarioMode || 'mine',
+          scenarioText: scenario || '',
+          baselineTranscript: firstTranscript || '',
+          baselineScores: firstScores || { clarity: 2, structure: 2, conciseness: 2 },
+          focusSkill: focus || 'structure',
+          focusExplanation: assessment?.focusExplanation || '',
+          highlights: assessment?.highlights || [],
+          technique: assessment?.technique || { name: 'Framework', steps: [], example: '' },
+          practicePlan: practicePlan || { minutes: 5, frequency: 3 },
+          retryTranscript: trimmedTarget,
+          retryScores: comparison.secondScores,
+          comparison,
+        });
+      } catch (dbErr) {
+        console.warn('Session persistence error:', dbErr);
       }
 
       return NextResponse.json({
